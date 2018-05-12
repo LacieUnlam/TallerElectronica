@@ -1,3 +1,4 @@
 (fp_lib_table
   (lib (name smisioto_w_pth_resistors)(type KiCad)(uri ${KIPRJMOD}/fp/w_pth_resistors.pretty)(options "")(descr ""))
+  (lib (name opto)(type KiCad)(uri ${KIPRJMOD}/fp/opto.pretty)(options "")(descr ""))
 )
