@@ -400,7 +400,7 @@ Wire Wire Line
 	5950 5675 5575 5675
 Connection ~ 5575 5675
 Text Notes 6650 5875 0    60   ~ 0
-C1 es truehole.  C2 es SMD.\nUsar cualquiera de los 2.\nVR1 cambia con la elección del capacitor:\n1uf -> 2.2K\n100nf -> 22K
+C1 es thru-hole.  C2 es SMD.\nUsar cualquiera de los 2.\nVR1 cambia con la elección del capacitor:\n1uf -> 2.2K\n100nf -> 22K
 $Comp
 L +5V #PWR011
 U 1 1 5AEE20B0
