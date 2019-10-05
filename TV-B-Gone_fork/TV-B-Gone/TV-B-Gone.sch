@@ -1,4 +1,5 @@
 EESchema Schematic File Version 4
+LIBS:TV-B-Gone-cache
 EELAYER 26 0
 EELAYER END
 $Descr A4 11693 8268
@@ -110,12 +111,12 @@ Wire Wire Line
 $Comp
 L power:GND #PWR018
 U 1 1 5D984E97
-P 6500 4650
-F 0 "#PWR018" H 6500 4400 50  0001 C CNN
-F 1 "GND" H 6505 4477 50  0000 C CNN
-F 2 "" H 6500 4650 50  0001 C CNN
-F 3 "" H 6500 4650 50  0001 C CNN
-	1    6500 4650
+P 7275 5100
+F 0 "#PWR018" H 7275 4850 50  0001 C CNN
+F 1 "GND" H 7280 4927 50  0000 C CNN
+F 2 "" H 7275 5100 50  0001 C CNN
+F 3 "" H 7275 5100 50  0001 C CNN
+	1    7275 5100
 	1    0    0    -1  
 $EndComp
 Wire Wire Line
@@ -135,22 +136,11 @@ F 3 "" H 4600 2675 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L Device:CP1_Small C2
-U 1 1 5D985158
-P 4275 2925
-F 0 "C2" H 4366 2971 50  0000 L CNN
-F 1 "100nf" H 4366 2880 50  0000 L CNN
-F 2 "Capacitor_THT:C_Disc_D6.0mm_W2.5mm_P5.00mm" H 4275 2925 50  0001 C CNN
-F 3 "~" H 4275 2925 50  0001 C CNN
-	1    4275 2925
-	1    0    0    -1  
-$EndComp
-$Comp
 L Device:CP1_Small C1
 U 1 1 5D98525C
 P 3875 2925
-F 0 "C1" H 3966 2971 50  0000 L CNN
-F 1 "100uf" H 3966 2880 50  0000 L CNN
+F 0 "C1" H 3675 3025 50  0000 L CNN
+F 1 "100uf x 6.3v" H 3275 2925 50  0000 L CNN
 F 2 "Capacitor_THT:CP_Radial_D6.3mm_P2.50mm" H 3875 2925 50  0001 C CNN
 F 3 "~" H 3875 2925 50  0001 C CNN
 	1    3875 2925
@@ -195,30 +185,30 @@ Wire Wire Line
 $Comp
 L Device:Resonator_Small Y1
 U 1 1 5D985FD1
-P 6200 4600
-F 0 "Y1" V 6525 4550 50  0000 C CNN
-F 1 "8Mhz" V 6434 4550 50  0000 C CNN
-F 2 "Crystal:Resonator-3Pin_W10.0mm_H5.0mm" H 6175 4600 50  0001 C CNN
-F 3 "~" H 6175 4600 50  0001 C CNN
-	1    6200 4600
+P 6975 5050
+F 0 "Y1" V 7300 5000 50  0000 C CNN
+F 1 "8Mhz" V 7209 5000 50  0000 C CNN
+F 2 "Crystal:Resonator-3Pin_W10.0mm_H5.0mm" H 6950 5050 50  0001 C CNN
+F 3 "~" H 6950 5050 50  0001 C CNN
+	1    6975 5050
 	0    -1   -1   0   
 $EndComp
 Wire Wire Line
 	5200 3800 5950 3800
 Wire Wire Line
-	5950 3800 5950 4500
+	5950 3800 5950 4725
 Wire Wire Line
-	5950 4500 6100 4500
+	5950 4725 6375 4725
 Wire Wire Line
-	6100 4700 5875 4700
+	6800 5375 6375 5375
 Wire Wire Line
-	5875 4700 5875 3900
+	5875 5375 5875 3900
 Wire Wire Line
 	5875 3900 5200 3900
 Wire Wire Line
-	6400 4600 6500 4600
+	7175 5050 7275 5050
 Wire Wire Line
-	6500 4600 6500 4650
+	7275 5050 7275 5100
 $Comp
 L Transistor_BJT:2N3904 Q1
 U 1 1 5D986FA7
@@ -638,12 +628,12 @@ Wire Wire Line
 $Comp
 L power:PWR_FLAG #FLG0101
 U 1 1 5D9A5D91
-P 1700 3425
-F 0 "#FLG0101" H 1700 3500 50  0001 C CNN
-F 1 "PWR_FLAG" H 1700 3599 50  0000 C CNN
-F 2 "" H 1700 3425 50  0001 C CNN
-F 3 "~" H 1700 3425 50  0001 C CNN
-	1    1700 3425
+P 1675 3425
+F 0 "#FLG0101" H 1675 3500 50  0001 C CNN
+F 1 "PWR_FLAG" H 1675 3599 50  0000 C CNN
+F 2 "" H 1675 3425 50  0001 C CNN
+F 3 "~" H 1675 3425 50  0001 C CNN
+	1    1675 3425
 	1    0    0    -1  
 $EndComp
 $Comp
@@ -658,9 +648,9 @@ F 3 "~" H 1675 3850 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 Wire Wire Line
-	1700 3425 1700 3500
+	1675 3425 1675 3500
 Wire Wire Line
-	1700 3500 2100 3500
+	1675 3500 2100 3500
 Connection ~ 2100 3500
 Wire Wire Line
 	2100 3500 2100 3525
@@ -671,4 +661,95 @@ Wire Wire Line
 Connection ~ 2100 3950
 Wire Wire Line
 	2100 3950 2100 4025
+$Comp
+L Device:C_Small C3
+U 1 1 5D994F2F
+P 6375 4875
+F 0 "C3" H 6467 4921 50  0000 L CNN
+F 1 "18pf" H 6467 4830 50  0000 L CNN
+F 2 "Capacitor_THT:C_Disc_D3.0mm_W2.0mm_P2.50mm" H 6375 4875 50  0001 C CNN
+F 3 "~" H 6375 4875 50  0001 C CNN
+	1    6375 4875
+	1    0    0    -1  
+$EndComp
+$Comp
+L Device:C_Small C4
+U 1 1 5D996684
+P 6375 5225
+F 0 "C4" H 6467 5271 50  0000 L CNN
+F 1 "18pf" H 6467 5180 50  0000 L CNN
+F 2 "Capacitor_THT:C_Disc_D3.0mm_W2.0mm_P2.50mm" H 6375 5225 50  0001 C CNN
+F 3 "~" H 6375 5225 50  0001 C CNN
+	1    6375 5225
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	6800 4725 6800 4950
+Wire Wire Line
+	6800 4950 6875 4950
+Wire Wire Line
+	6875 5150 6800 5150
+Wire Wire Line
+	6800 5150 6800 5375
+$Comp
+L power:GND #PWR022
+U 1 1 5D99C614
+P 6075 5075
+F 0 "#PWR022" H 6075 4825 50  0001 C CNN
+F 1 "GND" H 6080 4902 50  0000 C CNN
+F 2 "" H 6075 5075 50  0001 C CNN
+F 3 "" H 6075 5075 50  0001 C CNN
+	1    6075 5075
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	6375 4775 6375 4725
+Connection ~ 6375 4725
+Wire Wire Line
+	6375 4725 6800 4725
+Wire Wire Line
+	6375 4975 6375 5050
+Wire Wire Line
+	6375 5325 6375 5375
+Connection ~ 6375 5375
+Wire Wire Line
+	6375 5375 5875 5375
+Wire Wire Line
+	6075 5075 6075 5050
+Wire Wire Line
+	6075 5050 6375 5050
+Connection ~ 6375 5050
+Wire Wire Line
+	6375 5050 6375 5125
+Wire Notes Line
+	6175 4625 6175 5500
+Wire Notes Line
+	6175 5500 6700 5500
+Wire Notes Line
+	6700 5500 6700 4625
+Wire Notes Line
+	6700 4625 6175 4625
+Text Notes 6225 5650 0    50   ~ 0
+Opcional, para cristal simple en Y1
+$Comp
+L Device:C_Small C2
+U 1 1 5D9AB272
+P 4275 2925
+F 0 "C2" H 4367 2971 50  0000 L CNN
+F 1 "100nf" H 4367 2880 50  0000 L CNN
+F 2 "Capacitor_THT:C_Disc_D7.5mm_W2.5mm_P5.00mm" H 4275 2925 50  0001 C CNN
+F 3 "~" H 4275 2925 50  0001 C CNN
+	1    4275 2925
+	1    0    0    -1  
+$EndComp
+Text Notes 8575 1100 0    50   ~ 0
+1
+Text Notes 8575 2475 0    50   ~ 0
+1
+Text Notes 8575 3775 0    50   ~ 0
+1
+Text Notes 8575 5200 0    50   ~ 0
+1
+Text Notes 8900 6325 0    50   ~ 0
+1- D1, D2, D3 y D5 son infrarrojos de 940nm.\nDos de ellos deben ser ángulo de emisión de 20grados, y \nlos otros de 40.  O pueden ser iguales y orientados\nadecuadamente para cubrir el mayor ángulo posible.
 $EndSCHEMATC
