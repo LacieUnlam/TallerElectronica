@@ -1,6 +1,36 @@
-EESchema Schematic File Version 4
+EESchema Schematic File Version 2
+LIBS:tester_remotos-rescue
+LIBS:power
+LIBS:device
+LIBS:transistors
+LIBS:conn
+LIBS:linear
+LIBS:regul
+LIBS:74xx
+LIBS:cmos4000
+LIBS:adc-dac
+LIBS:memory
+LIBS:xilinx
+LIBS:microcontrollers
+LIBS:dsp
+LIBS:microchip
+LIBS:analog_switches
+LIBS:motorola
+LIBS:texas
+LIBS:intel
+LIBS:audio
+LIBS:interface
+LIBS:digital-audio
+LIBS:philips
+LIBS:display
+LIBS:cypress
+LIBS:siliconi
+LIBS:opto
+LIBS:atmel
+LIBS:contrib
+LIBS:valves
 LIBS:tester_remotos-cache
-EELAYER 30 0
+EELAYER 25 0
 EELAYER END
 $Descr A4 11693 8268
 encoding utf-8
@@ -15,7 +45,7 @@ Comment3 ""
 Comment4 ""
 $EndDescr
 $Comp
-L tester_remotos-rescue:4011 U1
+L 4011 U1
 U 1 1 5786E985
 P 3750 2625
 F 0 "U1" H 3750 2675 60  0000 C CNN
@@ -26,7 +56,7 @@ F 3 "" H 3750 2625 60  0000 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L tester_remotos-rescue:4011 U1
+L 4011 U1
 U 2 1 5786EA10
 P 3775 4450
 F 0 "U1" H 3775 4500 60  0000 C CNN
@@ -37,7 +67,7 @@ F 3 "" H 3775 4450 60  0000 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L tester_remotos-rescue:4011 U1
+L 4011 U1
 U 3 1 5786EA90
 P 6275 4550
 F 0 "U1" H 6275 4600 60  0000 C CNN
@@ -48,7 +78,7 @@ F 3 "" H 6275 4550 60  0000 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L tester_remotos-rescue:4011 U1
+L 4011 U1
 U 4 1 5786EB09
 P 7925 4650
 F 0 "U1" H 7925 4700 60  0000 C CNN
@@ -59,7 +89,7 @@ F 3 "" H 7925 4650 60  0000 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L tester_remotos-rescue:R R1
+L R R1
 U 1 1 5786F27B
 P 4625 2625
 F 0 "R1" V 4705 2625 50  0000 C CNN
@@ -70,7 +100,7 @@ F 3 "" H 4625 2625 30  0000 C CNN
 	0    1    1    0   
 $EndComp
 $Comp
-L tester_remotos-rescue:LED-RESCUE-tester_remotos D1
+L LED-RESCUE-tester_remotos D1
 U 1 1 5786F2E2
 P 4875 2925
 F 0 "D1" H 4875 3025 50  0000 C CNN
@@ -81,7 +111,7 @@ F 3 "" H 4875 2925 60  0000 C CNN
 	0    -1   -1   0   
 $EndComp
 $Comp
-L tester_remotos-rescue:D D2
+L D D2
 U 1 1 5786F66B
 P 4600 4450
 F 0 "D2" H 4600 4550 50  0000 C CNN
@@ -92,7 +122,7 @@ F 3 "" H 4600 4450 60  0000 C CNN
 	-1   0    0    1   
 $EndComp
 $Comp
-L tester_remotos-rescue:CP1 C2
+L CP1 C2
 U 1 1 5786F71C
 P 4900 4725
 F 0 "C2" H 4925 4825 50  0000 L CNN
@@ -103,7 +133,7 @@ F 3 "" H 4900 4725 60  0000 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L tester_remotos-rescue:R R3
+L R R3
 U 1 1 5786F77B
 P 5225 4725
 F 0 "R3" H 5350 4800 50  0000 C CNN
@@ -114,7 +144,7 @@ F 3 "" H 5225 4725 30  0000 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L power:GND #PWR01
+L GND #PWR01
 U 1 1 5786FDDE
 P 2400 3750
 F 0 "#PWR01" H 2400 3500 50  0001 C CNN
@@ -125,7 +155,7 @@ F 3 "" H 2400 3750 60  0000 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L power:GND #PWR02
+L GND #PWR02
 U 1 1 5786FE25
 P 4875 3200
 F 0 "#PWR02" H 4875 2950 50  0001 C CNN
@@ -136,7 +166,7 @@ F 3 "" H 4875 3200 60  0000 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L power:GND #PWR03
+L GND #PWR03
 U 1 1 5786FE6C
 P 4900 5050
 F 0 "#PWR03" H 4900 4800 50  0001 C CNN
@@ -147,7 +177,7 @@ F 3 "" H 4900 5050 60  0000 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L power:GND #PWR04
+L GND #PWR04
 U 1 1 5786FEEF
 P 5225 5050
 F 0 "#PWR04" H 5225 4800 50  0001 C CNN
@@ -158,7 +188,7 @@ F 3 "" H 5225 5050 60  0000 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L power:GND #PWR05
+L GND #PWR05
 U 1 1 5786FF72
 P 5575 5800
 F 0 "#PWR05" H 5575 5550 50  0001 C CNN
@@ -169,7 +199,7 @@ F 3 "" H 5575 5800 60  0000 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L power:+5V #PWR06
+L +5V #PWR06
 U 1 1 5787006D
 P 2400 3100
 F 0 "#PWR06" H 2400 2950 50  0001 C CNN
@@ -180,7 +210,7 @@ F 3 "" H 2400 3100 60  0000 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L power:+5V #PWR07
+L +5V #PWR07
 U 1 1 578701F4
 P 3550 2225
 F 0 "#PWR07" H 3550 2075 50  0001 C CNN
@@ -191,7 +221,7 @@ F 3 "" H 3550 2225 60  0000 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L power:GND #PWR08
+L GND #PWR08
 U 1 1 57872017
 P 3550 3025
 F 0 "#PWR08" H 3550 2775 50  0001 C CNN
@@ -212,20 +242,20 @@ Wire Wire Line
 Wire Wire Line
 	3025 2725 3150 2725
 Wire Wire Line
-	3025 2525 3025 2625
+	3025 2525 3025 2725
 Wire Wire Line
 	3025 2525 3150 2525
 Wire Wire Line
 	3025 2625 2850 2625
 Wire Wire Line
-	2850 2625 2850 3450
+	2850 2625 2850 4425
 Wire Wire Line
 	2850 3450 2300 3450
 Connection ~ 3025 2625
 Wire Wire Line
 	3175 4350 3025 4350
 Wire Wire Line
-	3025 4350 3025 4425
+	3025 4350 3025 4550
 Wire Wire Line
 	3025 4550 3175 4550
 Wire Wire Line
@@ -245,7 +275,7 @@ Wire Wire Line
 Wire Wire Line
 	4900 4575 4900 4450
 Wire Wire Line
-	4750 4450 4900 4450
+	4750 4450 5675 4450
 Wire Wire Line
 	4450 4450 4375 4450
 Wire Wire Line
@@ -257,14 +287,14 @@ Connection ~ 5225 4450
 Wire Wire Line
 	5675 4650 5575 4650
 Wire Wire Line
-	5575 4650 5575 5025
+	5575 4650 5575 5325
 Wire Wire Line
-	5575 5625 5575 5675
+	5575 5625 5575 5800
 Wire Wire Line
-	5575 5025 6050 5025
+	5575 5025 6200 5025
 Connection ~ 5575 5025
 Wire Wire Line
-	6875 4550 6950 4550
+	6875 4550 7325 4550
 Wire Wire Line
 	7225 4750 7325 4750
 Wire Wire Line
@@ -280,7 +310,7 @@ Wire Wire Line
 	7225 4550 7225 4750
 Connection ~ 7225 4550
 $Comp
-L tester_remotos-rescue:BC548 Q1
+L BC548 Q1
 U 1 1 5AEDF013
 P 9200 4650
 F 0 "Q1" H 9400 4725 50  0000 L CNN
@@ -291,7 +321,7 @@ F 3 "" H 9200 4650 50  0001 L CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L power:+5V #PWR09
+L +5V #PWR09
 U 1 1 5AEDF416
 P 9325 3875
 F 0 "#PWR09" H 9325 3725 50  0001 C CNN
@@ -302,7 +332,7 @@ F 3 "" H 9325 3875 60  0000 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L tester_remotos-rescue:R R2
+L R R2
 U 1 1 5AEDF474
 P 8750 4650
 F 0 "R2" V 8830 4650 50  0000 C CNN
@@ -313,7 +343,7 @@ F 3 "" H 8750 4650 50  0001 C CNN
 	0    1    1    0   
 $EndComp
 $Comp
-L power:GND #PWR010
+L GND #PWR010
 U 1 1 5AEDF8FB
 P 9300 4925
 F 0 "#PWR010" H 9300 4675 50  0001 C CNN
@@ -338,7 +368,7 @@ Wire Wire Line
 Wire Wire Line
 	9300 4150 9300 4450
 $Comp
-L tester_remotos-rescue:CP1 C3
+L CP1 C3
 U 1 1 5AEE09FA
 P 5575 5475
 F 0 "C3" H 5600 5575 50  0000 L CNN
@@ -349,7 +379,7 @@ F 3 "" H 5575 5475 60  0000 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L tester_remotos-rescue:C C4
+L C C4
 U 1 1 5AEE16D3
 P 5950 5475
 F 0 "C4" H 5975 5575 50  0000 L CNN
@@ -372,7 +402,7 @@ Connection ~ 5575 5675
 Text Notes 6650 5875 0    60   ~ 0
 C1 es thru-hole.  C2 es SMD.\nUsar cualquiera de los 2.\nVR1 cambia con la elección del capacitor:\n1uf -> 2.2K\n100nf -> 22K
 $Comp
-L power:+5V #PWR011
+L +5V #PWR011
 U 1 1 5AEE20B0
 P 2625 1100
 F 0 "#PWR011" H 2625 950 50  0001 C CNN
@@ -383,9 +413,9 @@ F 3 "" H 2625 1100 60  0000 C CNN
 	1    0    0    -1  
 $EndComp
 Wire Wire Line
-	2625 1100 2625 1225
+	2625 1100 2625 1350
 $Comp
-L power:GND #PWR012
+L GND #PWR012
 U 1 1 5AEE20C8
 P 1650 2200
 F 0 "#PWR012" H 1650 1950 50  0001 C CNN
@@ -396,14 +426,14 @@ F 3 "" H 1650 2200 60  0000 C CNN
 	1    0    0    -1  
 $EndComp
 Wire Wire Line
-	1650 1825 1650 2050
+	1650 1825 1650 2200
 Wire Wire Line
 	1550 1825 1550 2050
 Connection ~ 1650 2050
 NoConn ~ 1950 1425
 NoConn ~ 1950 1525
 $Comp
-L tester_remotos-rescue:C C1
+L C C1
 U 1 1 5AEE2708
 P 2625 1500
 F 0 "C1" H 2650 1600 50  0000 L CNN
@@ -415,7 +445,7 @@ F 3 "" H 2625 1500 50  0001 C CNN
 $EndComp
 Connection ~ 2625 1225
 $Comp
-L power:GND #PWR013
+L GND #PWR013
 U 1 1 5AEE27BE
 P 2625 1700
 F 0 "#PWR013" H 2625 1450 50  0001 C CNN
@@ -428,7 +458,7 @@ $EndComp
 Wire Wire Line
 	2625 1650 2625 1700
 $Comp
-L tester_remotos-rescue:VS1838B U2
+L VS1838B U2
 U 1 1 5AF38EA7
 P 1900 3450
 F 0 "U2" H 1500 3750 50  0000 L CNN
@@ -439,7 +469,7 @@ F 3 "" H 2550 3750 50  0000 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L tester_remotos-rescue:USB_B J1
+L USB_B J1
 U 1 1 5AF38D36
 P 1650 1425
 F 0 "J1" H 1450 1875 50  0000 L CNN
@@ -450,7 +480,7 @@ F 3 "" H 1800 1375 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 $Comp
-L tester_remotos-rescue:POT_TRIM RV1
+L POT_TRIM RV1
 U 1 1 5AF394E8
 P 6350 5025
 F 0 "RV1" V 6175 5025 50  0000 C CNN
@@ -468,7 +498,7 @@ Wire Wire Line
 	6350 5225 6350 5175
 Connection ~ 6050 5025
 $Comp
-L tester_remotos-rescue:Buzzer BZ1
+L Buzzer BZ1
 U 1 1 5AF39DA6
 P 9475 4050
 F 0 "BZ1" H 9625 4100 50  0000 L CNN
@@ -479,11 +509,11 @@ F 3 "" V 9450 4150 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 Wire Wire Line
-	1550 2050 1650 2050
+	1550 2050 2250 2050
 Wire Wire Line
-	1950 1225 2250 1225
+	1950 1225 2625 1225
 $Comp
-L tester_remotos-rescue:CONN_01X01 J2
+L CONN_01X01 J2
 U 1 1 5AF72734
 P 2250 900
 F 0 "J2" H 2250 1000 50  0000 C CNN
@@ -494,7 +524,7 @@ F 3 "" H 2250 900 50  0001 C CNN
 	0    -1   -1   0   
 $EndComp
 $Comp
-L tester_remotos-rescue:CONN_01X01 J3
+L CONN_01X01 J3
 U 1 1 5AF72A67
 P 2250 1725
 F 0 "J3" H 2250 1825 50  0000 C CNN
@@ -509,34 +539,4 @@ Wire Wire Line
 Wire Wire Line
 	2250 1100 2250 1225
 Connection ~ 2250 1225
-Wire Wire Line
-	3025 2625 3025 2725
-Wire Wire Line
-	2850 3450 2850 4425
-Wire Wire Line
-	3025 4425 3025 4550
-Wire Wire Line
-	4900 4450 5225 4450
-Wire Wire Line
-	5225 4450 5675 4450
-Wire Wire Line
-	5575 5025 5575 5200
-Wire Wire Line
-	6950 4550 7225 4550
-Wire Wire Line
-	7225 4550 7325 4550
-Wire Wire Line
-	5575 5200 5575 5325
-Wire Wire Line
-	5575 5675 5575 5800
-Wire Wire Line
-	1650 2050 1650 2200
-Wire Wire Line
-	1650 2050 2250 2050
-Wire Wire Line
-	2625 1225 2625 1350
-Wire Wire Line
-	6050 5025 6200 5025
-Wire Wire Line
-	2250 1225 2625 1225
 $EndSCHEMATC
