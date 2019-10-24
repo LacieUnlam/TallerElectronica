@@ -1,0 +1,6 @@
+La carpeta "orig" contiene los firmware originales obtenidos del sitio web (https://learn.adafruit.com/tv-b-gone-kit/download),
+para la version 1.2.
+La carpeta "firmware" posee los archivos compilados de la versión original firmware12, con modificaciones propuestas por el post
+del tema "TV B GONE Not working after reprogramming (attiny)" (https://forums.adafruit.com/viewtopic.php?f=23&t=130881#p650927)
+, con el que se salvan ciertos errores de compilación.
+

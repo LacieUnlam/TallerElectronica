@@ -1,0 +1,1668 @@
+   1               		.file	"main.c"
+   2               	__SP_H__ = 0x3e
+   3               	__SP_L__ = 0x3d
+   4               	__SREG__ = 0x3f
+   5               	__tmp_reg__ = 0
+   6               	__zero_reg__ = 1
+   9               		.text
+  10               	.Ltext0:
+ 114               	.global	read_bits
+ 116               	read_bits:
+ 117               		.stabd	46,0,0
+   1:main.c        **** /*
+   2:main.c        **** TV-B-Gone Firmware version 1.2
+   3:main.c        **** for use with ATtiny85v and v1.2 hardware
+   4:main.c        **** (c) Mitch Altman + Limor Fried 2009
+   5:main.c        **** Last edits, August 16 2009
+   6:main.c        **** 
+   7:main.c        **** With some code from:
+   8:main.c        **** Kevin Timmerman & Damien Good 7-Dec-07
+   9:main.c        **** 
+  10:main.c        **** Distributed under Creative Commons 2.5 -- Attib & Share Alike
+  11:main.c        **** 
+  12:main.c        **** This is the 'universal' code designed for v1.2 - it will select EU or NA
+  13:main.c        **** depending on a pulldown resistor on pin B1 !
+  14:main.c        **** */
+  15:main.c        **** 
+  16:main.c        **** #include <avr/io.h>             // this contains all the IO port definitions
+  17:main.c        **** #include <avr/eeprom.h>
+  18:main.c        **** #include <avr/sleep.h>          // definitions for power-down modes
+  19:main.c        **** #include <avr/pgmspace.h>       // definitions or keeping constants in program memory
+  20:main.c        **** #include <avr/wdt.h>
+  21:main.c        **** #include "main.h"
+  22:main.c        **** #include "util.h"
+  23:main.c        **** 
+  24:main.c        **** 
+  25:main.c        **** /*
+  26:main.c        **** This project transmits a bunch of TV POWER codes, one right after the other, 
+  27:main.c        **** with a pause in between each.  (To have a visible indication that it is 
+  28:main.c        **** transmitting, it also pulses a visible LED once each time a POWER code is 
+  29:main.c        **** transmitted.)  That is all TV-B-Gone does.  The tricky part of TV-B-Gone 
+  30:main.c        **** was collecting all of the POWER codes, and getting rid of the duplicates and 
+  31:main.c        **** near-duplicates (because if there is a duplicate, then one POWER code will 
+  32:main.c        **** turn a TV off, and the duplicate will turn it on again (which we certainly 
+  33:main.c        **** do not want).  I have compiled the most popular codes with the 
+  34:main.c        **** duplicates eliminated, both for North America (which is the same as Asia, as 
+  35:main.c        **** far as POWER codes are concerned -- even though much of Asia USES PAL video) 
+  36:main.c        **** and for Europe (which works for Australia, New Zealand, the Middle East, and 
+  37:main.c        **** other parts of the world that use PAL video).
+  38:main.c        **** 
+  39:main.c        **** Before creating a TV-B-Gone Kit, I originally started this project by hacking 
+  40:main.c        **** the MiniPOV kit.  This presents a limitation, based on the size of
+  41:main.c        **** the Atmel ATtiny2313 internal flash memory, which is 2KB.  With 2KB we can only 
+  42:main.c        **** fit about 7 POWER codes into the firmware's database of POWER codes.  However,
+  43:main.c        **** the more codes the better! Which is why we chose the ATtiny85 for the 
+  44:main.c        **** TV-B-Gone Kit.
+  45:main.c        **** 
+  46:main.c        **** This version of the firmware has the most popular 100+ POWER codes for 
+  47:main.c        **** North America and 100+ POWER codes for Europe. You can select which region 
+  48:main.c        **** to use by soldering a 10K pulldown resistor.
+  49:main.c        **** */
+  50:main.c        **** 
+  51:main.c        **** 
+  52:main.c        **** /*
+  53:main.c        **** This project is a good example of how to use the AVR chip timers.
+  54:main.c        **** */
+  55:main.c        **** 
+  56:main.c        **** 
+  57:main.c        **** /*
+  58:main.c        **** The hardware for this project is very simple:
+  59:main.c        ****      ATtiny85 has 8 pins:
+  60:main.c        ****        pin 1   RST + Button
+  61:main.c        ****        pin 2   one pin of ceramic resonator MUST be 8.0 mhz
+  62:main.c        ****        pin 3   other pin of ceramic resonator
+  63:main.c        ****        pin 4   ground
+  64:main.c        ****        pin 5   OC1A - IR emitters, through a '2907 PNP driver that connects 
+  65:main.c        ****                to 4 (or more!) PN2222A drivers, with 1000 ohm base resistor 
+  66:main.c        ****                and also connects to programming circuitry
+  67:main.c        ****        pin 6   Region selector. Float for US, 10K pulldown for EU,
+  68:main.c        ****                also connects to programming circuitry
+  69:main.c        ****        pin 7   PB0 - visible LED, and also connects to programming circuitry
+  70:main.c        ****        pin 8   +3-5v DC (such as 2-4 AA batteries!)
+  71:main.c        ****     See the schematic for more details.
+  72:main.c        **** 
+  73:main.c        ****     This firmware requires using an 8.0MHz ceramic resonator 
+  74:main.c        ****        (since the internal oscillator may not be accurate enough).
+  75:main.c        **** 
+  76:main.c        ****     IMPORTANT:  to use the ceramic resonator, you must perform the following:
+  77:main.c        ****                     make burn-fuse_cr
+  78:main.c        **** */
+  79:main.c        **** 
+  80:main.c        **** 
+  81:main.c        **** 
+  82:main.c        **** extern const PGM_P * const NApowerCodes[] PROGMEM;
+  83:main.c        **** extern const PGM_P * const EUpowerCodes[] PROGMEM;
+  84:main.c        **** extern const uint8_t num_NAcodes, num_EUcodes;
+  85:main.c        **** 
+  86:main.c        **** 
+  87:main.c        **** /* This function is the 'workhorse' of transmitting IR codes.
+  88:main.c        ****    Given the on and off times, it turns on the PWM output on and off
+  89:main.c        ****    to generate one 'pair' from a long code. Each code has ~50 pairs! */
+  90:main.c        **** void xmitCodeElement(uint16_t ontime, uint16_t offtime, uint8_t PWM_code )
+  91:main.c        **** {
+  92:main.c        ****   // start Timer0 outputting the carrier frequency to IR emitters on and OC0A 
+  93:main.c        ****   // (PB0, pin 5)
+  94:main.c        ****   TCNT0 = 0; // reset the timers so they are aligned
+  95:main.c        ****   TIFR = 0;  // clean out the timer flags
+  96:main.c        **** 
+  97:main.c        ****   if(PWM_code) {
+  98:main.c        ****     // 99% of codes are PWM codes, they are pulses of a carrier frequecy
+  99:main.c        ****     // Usually the carrier is around 38KHz, and we generate that with PWM
+ 100:main.c        ****     // timer 0
+ 101:main.c        ****     TCCR0A =_BV(COM0A0) | _BV(WGM01);          // set up timer 0
+ 102:main.c        ****     TCCR0B = _BV(CS00);
+ 103:main.c        ****   } else {
+ 104:main.c        ****     // However some codes dont use PWM in which case we just turn the IR
+ 105:main.c        ****     // LED on for the period of time.
+ 106:main.c        ****     PORTB &= ~_BV(IRLED);
+ 107:main.c        ****   }
+ 108:main.c        **** 
+ 109:main.c        ****   // Now we wait, allowing the PWM hardware to pulse out the carrier 
+ 110:main.c        ****   // frequency for the specified 'on' time
+ 111:main.c        ****   delay_ten_us(ontime);
+ 112:main.c        ****   
+ 113:main.c        ****   // Now we have to turn it off so disable the PWM output
+ 114:main.c        ****   TCCR0A = 0;
+ 115:main.c        ****   TCCR0B = 0;
+ 116:main.c        ****   // And make sure that the IR LED is off too (since the PWM may have 
+ 117:main.c        ****   // been stopped while the LED is on!)
+ 118:main.c        ****   PORTB |= _BV(IRLED);           // turn off IR LED
+ 119:main.c        **** 
+ 120:main.c        ****   // Now we wait for the specified 'off' time
+ 121:main.c        ****   delay_ten_us(offtime);
+ 122:main.c        **** }
+ 123:main.c        **** 
+ 124:main.c        **** /* This is kind of a strange but very useful helper function
+ 125:main.c        ****    Because we are using compression, we index to the timer table
+ 126:main.c        ****    not with a full 8-bit byte (which is wasteful) but 2 or 3 bits.
+ 127:main.c        ****    Once code_ptr is set up to point to the right part of memory,
+ 128:main.c        ****    this function will let us read 'count' bits at a time which
+ 129:main.c        ****    it does by reading a byte into 'bits_r' and then buffering it. */
+ 130:main.c        **** 
+ 131:main.c        **** uint8_t bitsleft_r = 0;
+ 132:main.c        **** uint8_t bits_r=0;
+ 133:main.c        **** PGM_P code_ptr;
+ 134:main.c        **** 
+ 135:main.c        **** // we cant read more than 8 bits at a time so dont try!
+ 136:main.c        **** uint8_t read_bits(uint8_t count)
+ 137:main.c        **** {
+ 119               	.LM0:
+ 120               	.LFBB1:
+ 121               	/* prologue: function */
+ 122               	/* frame size = 0 */
+ 123               	/* stack size = 0 */
+ 124               	.L__stack_usage = 0
+ 125 0000 E091 0000 		lds r30,code_ptr
+ 126 0004 F091 0000 		lds r31,code_ptr+1
+ 127 0008 6091 0000 		lds r22,bits_r
+ 128 000c 9091 0000 		lds r25,bitsleft_r
+ 129 0010 282F      		mov r18,r24
+ 130 0012 30E0      		ldi r19,0
+ 131 0014 2150      		subi r18,1
+ 132 0016 3109      		sbc r19,__zero_reg__
+ 138:main.c        ****   uint8_t i;
+ 139:main.c        ****   uint8_t tmp=0;
+ 134               	.LM1:
+ 135 0018 80E0      		ldi r24,0
+ 136               	.L2:
+ 140:main.c        ****   
+ 141:main.c        ****   // we need to read back count bytes
+ 142:main.c        ****   for (i=0; i<count; i++) {
+ 138               	.LM2:
+ 139 001a 2F3F      		cpi r18,-1
+ 140 001c 4FEF      		ldi r20,-1
+ 141 001e 3407      		cpc r19,r20
+ 142 0020 01F0      		breq .L6
+ 143:main.c        ****     // check if the 8-bit buffer we have has run out
+ 144:main.c        ****     if (bitsleft_r == 0) {
+ 144               	.LM3:
+ 145 0022 9111      		cpse r25,__zero_reg__
+ 146 0024 00C0      		rjmp .L3
+ 147               	.LBB21:
+ 145:main.c        ****       // in which case we read a new byte in
+ 146:main.c        ****       bits_r = pgm_read_byte(code_ptr++);
+ 149               	.LM4:
+ 150 0026 AF01      		movw r20,r30
+ 151 0028 4F5F      		subi r20,-1
+ 152 002a 5F4F      		sbci r21,-1
+ 153               	/* #APP */
+ 154               	 ;  146 "main.c" 1
+ 155 002c 6491      		lpm r22, Z
+ 156               		
+ 157               	 ;  0 "" 2
+ 158               	/* #NOAPP */
+ 159 002e FA01      		movw r30,r20
+ 160               	.LBE21:
+ 147:main.c        ****       // and reset the buffer size (8 bites in a byte)
+ 148:main.c        ****       bitsleft_r = 8;
+ 162               	.LM5:
+ 163 0030 98E0      		ldi r25,lo8(8)
+ 164               	.L3:
+ 149:main.c        ****     }
+ 150:main.c        ****     // remove one bit
+ 151:main.c        ****     bitsleft_r--;
+ 166               	.LM6:
+ 167 0032 9150      		subi r25,lo8(-(-1))
+ 152:main.c        ****     // and shift it off of the end of 'bits_r'
+ 153:main.c        ****     tmp |= (((bits_r >> (bitsleft_r)) & 1) << (count-1-i));
+ 169               	.LM7:
+ 170 0034 462F      		mov r20,r22
+ 171 0036 50E0      		ldi r21,0
+ 172 0038 092E      		mov r0,r25
+ 173 003a 00C0      		rjmp 2f
+ 174               		1:
+ 175 003c 5595      		asr r21
+ 176 003e 4795      		ror r20
+ 177               		2:
+ 178 0040 0A94      		dec r0
+ 179 0042 02F4      		brpl 1b
+ 180 0044 4170      		andi r20,1
+ 181 0046 5527      		clr r21
+ 182 0048 022E      		mov r0,r18
+ 183 004a 00C0      		rjmp 2f
+ 184               		1:
+ 185 004c 440F      		lsl r20
+ 186               		2:
+ 187 004e 0A94      		dec r0
+ 188 0050 02F4      		brpl 1b
+ 189 0052 842B      		or r24,r20
+ 190 0054 2150      		subi r18,1
+ 191 0056 3109      		sbc r19,__zero_reg__
+ 192 0058 00C0      		rjmp .L2
+ 193               	.L6:
+ 194 005a 9093 0000 		sts bitsleft_r,r25
+ 195 005e F093 0000 		sts code_ptr+1,r31
+ 196 0062 E093 0000 		sts code_ptr,r30
+ 197 0066 6093 0000 		sts bits_r,r22
+ 154:main.c        ****   }
+ 155:main.c        ****   // return the selected bits in the LSB part of tmp
+ 156:main.c        ****   return tmp; 
+ 157:main.c        **** }
+ 199               	.LM8:
+ 200 006a 0895      		ret
+ 205               	.Lscope1:
+ 207               		.stabd	78,0,0
+ 210               	.global	delay_ten_us
+ 212               	delay_ten_us:
+ 213               		.stabd	46,0,0
+ 158:main.c        **** 
+ 159:main.c        **** 
+ 160:main.c        **** /*
+ 161:main.c        **** The C compiler creates code that will transfer all constants into RAM when 
+ 162:main.c        **** the microcontroller resets.  Since this firmware has a table (powerCodes) 
+ 163:main.c        **** that is too large to transfer into RAM, the C compiler needs to be told to 
+ 164:main.c        **** keep it in program memory space.  This is accomplished by the macro PROGMEM 
+ 165:main.c        **** (this is used in the definition for powerCodes).  Since the C compiler assumes 
+ 166:main.c        **** that constants are in RAM, rather than in program memory, when accessing
+ 167:main.c        **** powerCodes, we need to use the pgm_read_word() and pgm_read_byte macros, and 
+ 168:main.c        **** we need to use powerCodes as an address.  This is done with PGM_P, defined 
+ 169:main.c        **** below.  
+ 170:main.c        **** For example, when we start a new powerCode, we first point to it with the 
+ 171:main.c        **** following statement:
+ 172:main.c        ****     PGM_P thecode_p = pgm_read_word(powerCodes+i);
+ 173:main.c        **** The next read from the powerCode is a byte that indicates the carrier 
+ 174:main.c        **** frequency, read as follows:
+ 175:main.c        ****       const uint8_t freq = pgm_read_byte(code_ptr++);
+ 176:main.c        **** After that is a byte that tells us how many 'onTime/offTime' pairs we have:
+ 177:main.c        ****       const uint8_t numpairs = pgm_read_byte(code_ptr++);
+ 178:main.c        **** The next byte tells us the compression method. Since we are going to use a
+ 179:main.c        **** timing table to keep track of how to pulse the LED, and the tables are 
+ 180:main.c        **** pretty short (usually only 4-8 entries), we can index into the table with only
+ 181:main.c        **** 2 to 4 bits. Once we know the bit-packing-size we can decode the pairs
+ 182:main.c        ****       const uint8_t bitcompression = pgm_read_byte(code_ptr++);
+ 183:main.c        **** Subsequent reads from the powerCode are n bits (same as the packing size) 
+ 184:main.c        **** that index into another table in ROM that actually stores the on/off times
+ 185:main.c        ****       const PGM_P time_ptr = (PGM_P)pgm_read_word(code_ptr);
+ 186:main.c        **** */
+ 187:main.c        **** 
+ 188:main.c        **** 
+ 189:main.c        **** int main(void) {
+ 190:main.c        ****   uint16_t ontime, offtime;
+ 191:main.c        ****   uint8_t i,j, Loop;
+ 192:main.c        ****   uint8_t region = US;     // by default our code is US
+ 193:main.c        ****   
+ 194:main.c        ****   Loop = 0;                // by default we are not going to loop
+ 195:main.c        **** 
+ 196:main.c        ****   TCCR1 = 0;		   // Turn off PWM/freq gen, should be off already
+ 197:main.c        ****   TCCR0A = 0;
+ 198:main.c        ****   TCCR0B = 0;
+ 199:main.c        **** 
+ 200:main.c        ****   i = MCUSR;                     // Save reset reason
+ 201:main.c        ****   MCUSR = 0;                     // clear watchdog flag
+ 202:main.c        ****   WDTCR = _BV(WDCE) | _BV(WDE);  // enable WDT disable
+ 203:main.c        **** 
+ 204:main.c        ****   WDTCR = 0;                     // disable WDT while we setup
+ 205:main.c        **** 
+ 206:main.c        ****   DDRB = _BV(LED) | _BV(IRLED);   // set the visible and IR LED pins to outputs
+ 207:main.c        ****   PORTB = _BV(LED) |              //  visible LED is off when pin is high
+ 208:main.c        ****           _BV(IRLED) |            // IR LED is off when pin is high
+ 209:main.c        ****           _BV(REGIONSWITCH);     // Turn on pullup on region switch pin
+ 210:main.c        **** 
+ 211:main.c        ****   DEBUGP(putstring_nl("Hello!"));
+ 212:main.c        **** 
+ 213:main.c        ****   // check the reset flags
+ 214:main.c        ****   if (i & _BV(BORF)) {    // Brownout
+ 215:main.c        ****     // Flash out an error and go to sleep
+ 216:main.c        ****     flashslowLEDx(2);	
+ 217:main.c        ****     tvbgone_sleep();  
+ 218:main.c        ****   }
+ 219:main.c        **** 
+ 220:main.c        ****   delay_ten_us(5000);            // Let everything settle for a bit
+ 221:main.c        **** 
+ 222:main.c        ****   // determine region
+ 223:main.c        ****   if (PINB & _BV(REGIONSWITCH)) {
+ 224:main.c        ****     region = US; // US
+ 225:main.c        ****     DEBUGP(putstring_nl("US"));
+ 226:main.c        ****   } else {
+ 227:main.c        ****     region = EU;
+ 228:main.c        ****     DEBUGP(putstring_nl("EU"));
+ 229:main.c        ****   }
+ 230:main.c        **** 
+ 231:main.c        ****   // Tell the user what region we're in  - 3 is US 4 is EU
+ 232:main.c        ****   quickflashLEDx(3+region);
+ 233:main.c        ****   
+ 234:main.c        ****   // Starting execution loop
+ 235:main.c        ****   delay_ten_us(25000);
+ 236:main.c        ****   
+ 237:main.c        ****   // turn on watchdog timer immediately, this protects against
+ 238:main.c        ****   // a 'stuck' system by resetting it
+ 239:main.c        ****   wdt_enable(WDTO_8S); // 1 second long timeout
+ 240:main.c        **** 
+ 241:main.c        ****   // Indicate how big our database is
+ 242:main.c        ****   DEBUGP(putstring("\n\rNA Codesize: "); putnum_ud(num_NAcodes););
+ 243:main.c        ****   DEBUGP(putstring("\n\rEU Codesize: "); putnum_ud(num_EUcodes););
+ 244:main.c        **** 
+ 245:main.c        ****   do {	//Execute the code at least once.  If Loop is on, execute forever.
+ 246:main.c        **** 
+ 247:main.c        ****     // We may have different number of codes in either database
+ 248:main.c        ****     if (region == US) {
+ 249:main.c        ****       j = num_NAcodes;
+ 250:main.c        ****     } else {
+ 251:main.c        ****       j = num_EUcodes;
+ 252:main.c        ****     }
+ 253:main.c        **** 
+ 254:main.c        ****     // for every POWER code in our collection
+ 255:main.c        ****     for(i=0 ; i < j; i++) {   
+ 256:main.c        **** 
+ 257:main.c        ****       // print out the code # we are about to transmit
+ 258:main.c        ****       DEBUGP(putstring("\n\r\n\rCode #: "); putnum_ud(i));
+ 259:main.c        **** 
+ 260:main.c        ****       //To keep Watchdog from resetting in middle of code.
+ 261:main.c        ****       wdt_reset();
+ 262:main.c        **** 
+ 263:main.c        ****       // point to next POWER code, from the right database
+ 264:main.c        ****       if (region == US) {
+ 265:main.c        **** 	code_ptr = (PGM_P)pgm_read_word(NApowerCodes+i);  
+ 266:main.c        ****       } else {
+ 267:main.c        **** 	code_ptr = (PGM_P)pgm_read_word(EUpowerCodes+i);  
+ 268:main.c        ****       }
+ 269:main.c        **** 
+ 270:main.c        ****       // print out the address in ROM memory we're reading
+ 271:main.c        ****       DEBUGP(putstring("\n\rAddr: "); putnum_uh(code_ptr));
+ 272:main.c        ****       
+ 273:main.c        ****       // Read the carrier frequency from the first byte of code structure
+ 274:main.c        ****       const uint8_t freq = pgm_read_byte(code_ptr++);
+ 275:main.c        ****       // set OCR for Timer1 to output this POWER code's carrier frequency
+ 276:main.c        ****       OCR0A = freq; 
+ 277:main.c        ****       
+ 278:main.c        ****       // Print out the frequency of the carrier and the PWM settings
+ 279:main.c        ****       DEBUGP(putstring("\n\rOCR1: "); putnum_ud(freq););
+ 280:main.c        ****       DEBUGP(uint16_t x = (freq+1) * 2; putstring("\n\rFreq: "); putnum_ud(F_CPU/x););
+ 281:main.c        ****       
+ 282:main.c        ****       // Get the number of pairs, the second byte from the code struct
+ 283:main.c        ****       const uint8_t numpairs = pgm_read_byte(code_ptr++);
+ 284:main.c        ****       DEBUGP(putstring("\n\rOn/off pairs: "); putnum_ud(numpairs));
+ 285:main.c        **** 
+ 286:main.c        ****       // Get the number of bits we use to index into the timer table
+ 287:main.c        ****       // This is the third byte of the structure
+ 288:main.c        ****       const uint8_t bitcompression = pgm_read_byte(code_ptr++);
+ 289:main.c        ****       DEBUGP(putstring("\n\rCompression: "); putnum_ud(bitcompression));
+ 290:main.c        **** 
+ 291:main.c        ****       // Get pointer (address in memory) to pulse-times table
+ 292:main.c        ****       // The address is 16-bits (2 byte, 1 word)
+ 293:main.c        ****       const PGM_P time_ptr = (PGM_P)pgm_read_word(code_ptr);
+ 294:main.c        ****       code_ptr+=2;
+ 295:main.c        **** 
+ 296:main.c        ****       // Transmit all codeElements for this POWER code 
+ 297:main.c        ****       // (a codeElement is an onTime and an offTime)
+ 298:main.c        ****       // transmitting onTime means pulsing the IR emitters at the carrier 
+ 299:main.c        ****       // frequency for the length of time specified in onTime
+ 300:main.c        ****       // transmitting offTime means no output from the IR emitters for the 
+ 301:main.c        ****       // length of time specified in offTime
+ 302:main.c        **** 
+ 303:main.c        ****       /*    
+ 304:main.c        ****       // print out all of the pulse pairs
+ 305:main.c        ****       for (uint8_t k=0; k<numpairs; k++) {
+ 306:main.c        **** 	uint8_t ti;
+ 307:main.c        **** 	ti = (read_bits(bitcompression)) * 4;
+ 308:main.c        **** 	// read the onTime and offTime from the program memory
+ 309:main.c        **** 	ontime = pgm_read_word(time_ptr+ti);
+ 310:main.c        **** 	offtime = pgm_read_word(time_ptr+ti+2);
+ 311:main.c        **** 	DEBUGP(putstring("\n\rti = "); putnum_ud(ti>>2); putstring("\tPair = "); putnum_ud(ontime));
+ 312:main.c        **** 	DEBUGP(putstring("\t"); putnum_ud(offtime));
+ 313:main.c        **** 	} 
+ 314:main.c        ****       */
+ 315:main.c        **** 
+ 316:main.c        ****       // For EACH pair in this code....
+ 317:main.c        ****       for (uint8_t k=0; k<numpairs; k++) {
+ 318:main.c        **** 	uint8_t ti;
+ 319:main.c        **** 	
+ 320:main.c        **** 	// Read the next 'n' bits as indicated by the compression variable
+ 321:main.c        **** 	// The multiply by 4 because there are 2 timing numbers per pair
+ 322:main.c        **** 	// and each timing number is one word long, so 4 bytes total!
+ 323:main.c        **** 	ti = (read_bits(bitcompression)) * 4;
+ 324:main.c        **** 
+ 325:main.c        **** 	// read the onTime and offTime from the program memory
+ 326:main.c        **** 	ontime = pgm_read_word(time_ptr+ti);  // read word 1 - ontime
+ 327:main.c        **** 	offtime = pgm_read_word(time_ptr+ti+2);  // read word 2 - offtime
+ 328:main.c        **** 
+ 329:main.c        **** 	// transmit this codeElement (ontime and offtime)
+ 330:main.c        **** 	xmitCodeElement(ontime, offtime, (freq!=0));  
+ 331:main.c        ****       } 
+ 332:main.c        ****       
+ 333:main.c        ****       //Flush remaining bits, so that next code starts
+ 334:main.c        ****       //with a fresh set of 8 bits.
+ 335:main.c        ****       bitsleft_r=0;	
+ 336:main.c        **** 
+ 337:main.c        ****       // delay 250 milliseconds before transmitting next POWER code
+ 338:main.c        ****       delay_ten_us(25000);
+ 339:main.c        ****       
+ 340:main.c        ****       // visible indication that a code has been output.
+ 341:main.c        ****       quickflashLED(); 
+ 342:main.c        ****     }
+ 343:main.c        ****   } while (Loop == 1);
+ 344:main.c        ****   
+ 345:main.c        ****   // We are done, no need for a watchdog timer anymore
+ 346:main.c        ****   wdt_disable();
+ 347:main.c        **** 
+ 348:main.c        ****   // flash the visible LED on PB0  4 times to indicate that we're done
+ 349:main.c        ****   delay_ten_us(65500); // wait maxtime 
+ 350:main.c        ****   delay_ten_us(65500); // wait maxtime 
+ 351:main.c        ****   quickflashLEDx(4);
+ 352:main.c        **** 
+ 353:main.c        ****   tvbgone_sleep();
+ 354:main.c        **** }
+ 355:main.c        **** 
+ 356:main.c        **** 
+ 357:main.c        **** /****************************** SLEEP FUNCTIONS ********/
+ 358:main.c        **** 
+ 359:main.c        **** void tvbgone_sleep( void )
+ 360:main.c        **** {
+ 361:main.c        ****   // Shut down everything and put the CPU to sleep
+ 362:main.c        ****   TCCR0A = 0;           // turn off frequency generator (should be off already)
+ 363:main.c        ****   TCCR0B = 0;           // turn off frequency generator (should be off already)
+ 364:main.c        ****   PORTB |= _BV(LED) |       // turn off visible LED
+ 365:main.c        ****            _BV(IRLED);     // turn off IR LED
+ 366:main.c        **** 
+ 367:main.c        ****   wdt_disable();           // turn off the watchdog (since we want to sleep
+ 368:main.c        ****   delay_ten_us(1000);      // wait 10 millisec
+ 369:main.c        **** 
+ 370:main.c        ****   MCUCR = _BV(SM1) |  _BV(SE);    // power down mode,  SE enables Sleep Modes
+ 371:main.c        ****   sleep_cpu();                    // put CPU into Power Down Sleep Mode
+ 372:main.c        **** }
+ 373:main.c        **** 
+ 374:main.c        **** 
+ 375:main.c        **** /****************************** LED AND DELAY FUNCTIONS ********/
+ 376:main.c        **** 
+ 377:main.c        **** 
+ 378:main.c        **** // This function delays the specified number of 10 microseconds
+ 379:main.c        **** // it is 'hardcoded' and is calibrated by adjusting DELAY_CNT 
+ 380:main.c        **** // in main.h Unless you are changing the crystal from 8mhz, dont
+ 381:main.c        **** // mess with this.
+ 382:main.c        **** void delay_ten_us(uint16_t us) {
+ 215               	.LM9:
+ 216               	.LFBB2:
+ 217               	/* prologue: function */
+ 218               	/* frame size = 0 */
+ 219               	/* stack size = 0 */
+ 220               	.L__stack_usage = 0
+ 221               	.L8:
+ 383:main.c        ****   uint8_t timer;
+ 384:main.c        ****   while (us != 0) {
+ 223               	.LM10:
+ 224 006c 0097      		sbiw r24,0
+ 225 006e 01F0      		breq .L12
+ 226 0070 2CE0      		ldi r18,lo8(12)
+ 227               	.L9:
+ 385:main.c        ****     // for 8MHz we want to delay 80 cycles per 10 microseconds
+ 386:main.c        ****     // this code is tweaked to give about that amount.
+ 387:main.c        ****     for (timer=0; timer <= DELAY_CNT; timer++) {
+ 388:main.c        ****       NOP;
+ 229               	.LM11:
+ 230               	/* #APP */
+ 231               	 ;  388 "main.c" 1
+ 232 0072 0000      		nop
+ 233               	 ;  0 "" 2
+ 389:main.c        ****       NOP;
+ 235               	.LM12:
+ 236               	 ;  389 "main.c" 1
+ 237 0074 0000      		nop
+ 238               	 ;  0 "" 2
+ 239               	/* #NOAPP */
+ 240 0076 2150      		subi r18,lo8(-(-1))
+ 387:main.c        ****       NOP;
+ 242               	.LM13:
+ 243 0078 01F4      		brne .L9
+ 390:main.c        ****     }
+ 391:main.c        ****     NOP;
+ 245               	.LM14:
+ 246               	/* #APP */
+ 247               	 ;  391 "main.c" 1
+ 248 007a 0000      		nop
+ 249               	 ;  0 "" 2
+ 392:main.c        ****     us--;
+ 251               	.LM15:
+ 252               	/* #NOAPP */
+ 253 007c 0197      		sbiw r24,1
+ 254 007e 00C0      		rjmp .L8
+ 255               	.L12:
+ 256               	/* epilogue start */
+ 393:main.c        ****   }
+ 394:main.c        **** }
+ 258               	.LM16:
+ 259 0080 0895      		ret
+ 261               	.Lscope2:
+ 263               		.stabd	78,0,0
+ 268               	.global	xmitCodeElement
+ 270               	xmitCodeElement:
+ 271               		.stabd	46,0,0
+  91:main.c        ****   // start Timer0 outputting the carrier frequency to IR emitters on and OC0A 
+ 273               	.LM17:
+ 274               	.LFBB3:
+ 275 0082 CF93      		push r28
+ 276 0084 DF93      		push r29
+ 277               	/* prologue: function */
+ 278               	/* frame size = 0 */
+ 279               	/* stack size = 2 */
+ 280               	.L__stack_usage = 2
+ 281 0086 EB01      		movw r28,r22
+  94:main.c        ****   TIFR = 0;  // clean out the timer flags
+ 283               	.LM18:
+ 284 0088 12BE      		out 0x32,__zero_reg__
+  95:main.c        **** 
+ 286               	.LM19:
+ 287 008a 18BE      		out 0x38,__zero_reg__
+  97:main.c        ****     // 99% of codes are PWM codes, they are pulses of a carrier frequecy
+ 289               	.LM20:
+ 290 008c 4423      		tst r20
+ 291 008e 01F0      		breq .L14
+ 101:main.c        ****     TCCR0B = _BV(CS00);
+ 293               	.LM21:
+ 294 0090 22E4      		ldi r18,lo8(66)
+ 295 0092 2ABD      		out 0x2a,r18
+ 102:main.c        ****   } else {
+ 297               	.LM22:
+ 298 0094 21E0      		ldi r18,lo8(1)
+ 299 0096 23BF      		out 0x33,r18
+ 300 0098 00C0      		rjmp .L15
+ 301               	.L14:
+ 106:main.c        ****   }
+ 303               	.LM23:
+ 304 009a C098      		cbi 0x18,0
+ 305               	.L15:
+ 111:main.c        ****   
+ 307               	.LM24:
+ 308 009c 00D0      		rcall delay_ten_us
+ 114:main.c        ****   TCCR0B = 0;
+ 310               	.LM25:
+ 311 009e 1ABC      		out 0x2a,__zero_reg__
+ 115:main.c        ****   // And make sure that the IR LED is off too (since the PWM may have 
+ 313               	.LM26:
+ 314 00a0 13BE      		out 0x33,__zero_reg__
+ 118:main.c        **** 
+ 316               	.LM27:
+ 317 00a2 C09A      		sbi 0x18,0
+ 121:main.c        **** }
+ 319               	.LM28:
+ 320 00a4 CE01      		movw r24,r28
+ 321               	/* epilogue start */
+ 122:main.c        **** 
+ 323               	.LM29:
+ 324 00a6 DF91      		pop r29
+ 325 00a8 CF91      		pop r28
+ 121:main.c        **** }
+ 327               	.LM30:
+ 328 00aa 00C0      		rjmp delay_ten_us
+ 330               	.Lscope3:
+ 332               		.stabd	78,0,0
+ 334               	.global	tvbgone_sleep
+ 336               	tvbgone_sleep:
+ 337               		.stabd	46,0,0
+ 360:main.c        ****   // Shut down everything and put the CPU to sleep
+ 339               	.LM31:
+ 340               	.LFBB4:
+ 341               	/* prologue: function */
+ 342               	/* frame size = 0 */
+ 343               	/* stack size = 0 */
+ 344               	.L__stack_usage = 0
+ 362:main.c        ****   TCCR0B = 0;           // turn off frequency generator (should be off already)
+ 346               	.LM32:
+ 347 00ac 1ABC      		out 0x2a,__zero_reg__
+ 363:main.c        ****   PORTB |= _BV(LED) |       // turn off visible LED
+ 349               	.LM33:
+ 350 00ae 13BE      		out 0x33,__zero_reg__
+ 364:main.c        ****            _BV(IRLED);     // turn off IR LED
+ 352               	.LM34:
+ 353 00b0 88B3      		in r24,0x18
+ 354 00b2 8560      		ori r24,lo8(5)
+ 355 00b4 88BB      		out 0x18,r24
+ 356               	.LBB22:
+ 357               	.LBB23:
+ 359               	.Ltext1:
+   1:/usr/lib/avr/include/avr/wdt.h **** /* Copyright (c) 2002, 2004 Marek Michalkiewicz
+   2:/usr/lib/avr/include/avr/wdt.h ****    Copyright (c) 2005, 2006, 2007 Eric B. Weddington
+   3:/usr/lib/avr/include/avr/wdt.h ****    All rights reserved.
+   4:/usr/lib/avr/include/avr/wdt.h **** 
+   5:/usr/lib/avr/include/avr/wdt.h ****    Redistribution and use in source and binary forms, with or without
+   6:/usr/lib/avr/include/avr/wdt.h ****    modification, are permitted provided that the following conditions are met:
+   7:/usr/lib/avr/include/avr/wdt.h **** 
+   8:/usr/lib/avr/include/avr/wdt.h ****    * Redistributions of source code must retain the above copyright
+   9:/usr/lib/avr/include/avr/wdt.h ****      notice, this list of conditions and the following disclaimer.
+  10:/usr/lib/avr/include/avr/wdt.h **** 
+  11:/usr/lib/avr/include/avr/wdt.h ****    * Redistributions in binary form must reproduce the above copyright
+  12:/usr/lib/avr/include/avr/wdt.h ****      notice, this list of conditions and the following disclaimer in
+  13:/usr/lib/avr/include/avr/wdt.h ****      the documentation and/or other materials provided with the
+  14:/usr/lib/avr/include/avr/wdt.h ****      distribution.
+  15:/usr/lib/avr/include/avr/wdt.h **** 
+  16:/usr/lib/avr/include/avr/wdt.h ****    * Neither the name of the copyright holders nor the names of
+  17:/usr/lib/avr/include/avr/wdt.h ****      contributors may be used to endorse or promote products derived
+  18:/usr/lib/avr/include/avr/wdt.h ****      from this software without specific prior written permission.
+  19:/usr/lib/avr/include/avr/wdt.h **** 
+  20:/usr/lib/avr/include/avr/wdt.h ****   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+  21:/usr/lib/avr/include/avr/wdt.h ****   AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  22:/usr/lib/avr/include/avr/wdt.h ****   IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+  23:/usr/lib/avr/include/avr/wdt.h ****   ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+  24:/usr/lib/avr/include/avr/wdt.h ****   LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+  25:/usr/lib/avr/include/avr/wdt.h ****   CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+  26:/usr/lib/avr/include/avr/wdt.h ****   SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+  27:/usr/lib/avr/include/avr/wdt.h ****   INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+  28:/usr/lib/avr/include/avr/wdt.h ****   CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+  29:/usr/lib/avr/include/avr/wdt.h ****   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+  30:/usr/lib/avr/include/avr/wdt.h ****   POSSIBILITY OF SUCH DAMAGE. */
+  31:/usr/lib/avr/include/avr/wdt.h **** 
+  32:/usr/lib/avr/include/avr/wdt.h **** /* $Id$ */
+  33:/usr/lib/avr/include/avr/wdt.h **** 
+  34:/usr/lib/avr/include/avr/wdt.h **** /*
+  35:/usr/lib/avr/include/avr/wdt.h ****    avr/wdt.h - macros for AVR watchdog timer
+  36:/usr/lib/avr/include/avr/wdt.h ****  */
+  37:/usr/lib/avr/include/avr/wdt.h **** 
+  38:/usr/lib/avr/include/avr/wdt.h **** #ifndef _AVR_WDT_H_
+  39:/usr/lib/avr/include/avr/wdt.h **** #define _AVR_WDT_H_
+  40:/usr/lib/avr/include/avr/wdt.h **** 
+  41:/usr/lib/avr/include/avr/wdt.h **** #include <avr/io.h>
+  42:/usr/lib/avr/include/avr/wdt.h **** #include <stdint.h>
+  43:/usr/lib/avr/include/avr/wdt.h **** 
+  44:/usr/lib/avr/include/avr/wdt.h **** /** \file */
+  45:/usr/lib/avr/include/avr/wdt.h **** /** \defgroup avr_watchdog <avr/wdt.h>: Watchdog timer handling
+  46:/usr/lib/avr/include/avr/wdt.h ****     \code #include <avr/wdt.h> \endcode
+  47:/usr/lib/avr/include/avr/wdt.h **** 
+  48:/usr/lib/avr/include/avr/wdt.h ****     This header file declares the interface to some inline macros
+  49:/usr/lib/avr/include/avr/wdt.h ****     handling the watchdog timer present in many AVR devices.  In order
+  50:/usr/lib/avr/include/avr/wdt.h ****     to prevent the watchdog timer configuration from being
+  51:/usr/lib/avr/include/avr/wdt.h ****     accidentally altered by a crashing application, a special timed
+  52:/usr/lib/avr/include/avr/wdt.h ****     sequence is required in order to change it.  The macros within
+  53:/usr/lib/avr/include/avr/wdt.h ****     this header file handle the required sequence automatically
+  54:/usr/lib/avr/include/avr/wdt.h ****     before changing any value.  Interrupts will be disabled during
+  55:/usr/lib/avr/include/avr/wdt.h ****     the manipulation.
+  56:/usr/lib/avr/include/avr/wdt.h **** 
+  57:/usr/lib/avr/include/avr/wdt.h ****     \note Depending on the fuse configuration of the particular
+  58:/usr/lib/avr/include/avr/wdt.h ****     device, further restrictions might apply, in particular it might
+  59:/usr/lib/avr/include/avr/wdt.h ****     be disallowed to turn off the watchdog timer.
+  60:/usr/lib/avr/include/avr/wdt.h **** 
+  61:/usr/lib/avr/include/avr/wdt.h ****     Note that for newer devices (ATmega88 and newer, effectively any
+  62:/usr/lib/avr/include/avr/wdt.h ****     AVR that has the option to also generate interrupts), the watchdog
+  63:/usr/lib/avr/include/avr/wdt.h ****     timer remains active even after a system reset (except a power-on
+  64:/usr/lib/avr/include/avr/wdt.h ****     condition), using the fastest prescaler value (approximately 15
+  65:/usr/lib/avr/include/avr/wdt.h ****     ms).  It is therefore required to turn off the watchdog early
+  66:/usr/lib/avr/include/avr/wdt.h ****     during program startup, the datasheet recommends a sequence like
+  67:/usr/lib/avr/include/avr/wdt.h ****     the following:
+  68:/usr/lib/avr/include/avr/wdt.h **** 
+  69:/usr/lib/avr/include/avr/wdt.h ****     \code
+  70:/usr/lib/avr/include/avr/wdt.h ****     #include <stdint.h>
+  71:/usr/lib/avr/include/avr/wdt.h ****     #include <avr/wdt.h>
+  72:/usr/lib/avr/include/avr/wdt.h **** 
+  73:/usr/lib/avr/include/avr/wdt.h ****     uint8_t mcusr_mirror __attribute__ ((section (".noinit")));
+  74:/usr/lib/avr/include/avr/wdt.h **** 
+  75:/usr/lib/avr/include/avr/wdt.h ****     void get_mcusr(void) \
+  76:/usr/lib/avr/include/avr/wdt.h ****       __attribute__((naked)) \
+  77:/usr/lib/avr/include/avr/wdt.h ****       __attribute__((section(".init3")));
+  78:/usr/lib/avr/include/avr/wdt.h ****     void get_mcusr(void)
+  79:/usr/lib/avr/include/avr/wdt.h ****     {
+  80:/usr/lib/avr/include/avr/wdt.h ****       mcusr_mirror = MCUSR;
+  81:/usr/lib/avr/include/avr/wdt.h ****       MCUSR = 0;
+  82:/usr/lib/avr/include/avr/wdt.h ****       wdt_disable();
+  83:/usr/lib/avr/include/avr/wdt.h ****     }
+  84:/usr/lib/avr/include/avr/wdt.h ****     \endcode
+  85:/usr/lib/avr/include/avr/wdt.h **** 
+  86:/usr/lib/avr/include/avr/wdt.h ****     Saving the value of MCUSR in \c mcusr_mirror is only needed if the
+  87:/usr/lib/avr/include/avr/wdt.h ****     application later wants to examine the reset source, but in particular, 
+  88:/usr/lib/avr/include/avr/wdt.h ****     clearing the watchdog reset flag before disabling the
+  89:/usr/lib/avr/include/avr/wdt.h ****     watchdog is required, according to the datasheet.
+  90:/usr/lib/avr/include/avr/wdt.h **** */
+  91:/usr/lib/avr/include/avr/wdt.h **** 
+  92:/usr/lib/avr/include/avr/wdt.h **** /**
+  93:/usr/lib/avr/include/avr/wdt.h ****    \ingroup avr_watchdog
+  94:/usr/lib/avr/include/avr/wdt.h ****    Reset the watchdog timer.  When the watchdog timer is enabled,
+  95:/usr/lib/avr/include/avr/wdt.h ****    a call to this instruction is required before the timer expires,
+  96:/usr/lib/avr/include/avr/wdt.h ****    otherwise a watchdog-initiated device reset will occur. 
+  97:/usr/lib/avr/include/avr/wdt.h **** */
+  98:/usr/lib/avr/include/avr/wdt.h **** 
+  99:/usr/lib/avr/include/avr/wdt.h **** #define wdt_reset() __asm__ __volatile__ ("wdr")
+ 100:/usr/lib/avr/include/avr/wdt.h **** 
+ 101:/usr/lib/avr/include/avr/wdt.h **** 
+ 102:/usr/lib/avr/include/avr/wdt.h **** #if defined(WDP3)
+ 103:/usr/lib/avr/include/avr/wdt.h **** # define _WD_PS3_MASK       _BV(WDP3)
+ 104:/usr/lib/avr/include/avr/wdt.h **** #else
+ 105:/usr/lib/avr/include/avr/wdt.h **** # define _WD_PS3_MASK       0x00
+ 106:/usr/lib/avr/include/avr/wdt.h **** #endif
+ 107:/usr/lib/avr/include/avr/wdt.h **** 
+ 108:/usr/lib/avr/include/avr/wdt.h **** #if defined(WDTCSR)
+ 109:/usr/lib/avr/include/avr/wdt.h **** #  define _WD_CONTROL_REG     WDTCSR
+ 110:/usr/lib/avr/include/avr/wdt.h **** #elif defined(WDTCR)
+ 111:/usr/lib/avr/include/avr/wdt.h **** #  define _WD_CONTROL_REG     WDTCR
+ 112:/usr/lib/avr/include/avr/wdt.h **** #else
+ 113:/usr/lib/avr/include/avr/wdt.h **** #  define _WD_CONTROL_REG     WDT
+ 114:/usr/lib/avr/include/avr/wdt.h **** #endif
+ 115:/usr/lib/avr/include/avr/wdt.h **** 
+ 116:/usr/lib/avr/include/avr/wdt.h **** #if defined(WDTOE)
+ 117:/usr/lib/avr/include/avr/wdt.h **** #define _WD_CHANGE_BIT      WDTOE
+ 118:/usr/lib/avr/include/avr/wdt.h **** #else
+ 119:/usr/lib/avr/include/avr/wdt.h **** #define _WD_CHANGE_BIT      WDCE
+ 120:/usr/lib/avr/include/avr/wdt.h **** #endif
+ 121:/usr/lib/avr/include/avr/wdt.h **** 
+ 122:/usr/lib/avr/include/avr/wdt.h **** 
+ 123:/usr/lib/avr/include/avr/wdt.h **** /**
+ 124:/usr/lib/avr/include/avr/wdt.h ****    \ingroup avr_watchdog
+ 125:/usr/lib/avr/include/avr/wdt.h ****    Enable the watchdog timer, configuring it for expiry after
+ 126:/usr/lib/avr/include/avr/wdt.h ****    \c timeout (which is a combination of the \c WDP0 through
+ 127:/usr/lib/avr/include/avr/wdt.h ****    \c WDP2 bits to write into the \c WDTCR register; For those devices 
+ 128:/usr/lib/avr/include/avr/wdt.h ****    that have a \c WDTCSR register, it uses the combination of the \c WDP0 
+ 129:/usr/lib/avr/include/avr/wdt.h ****    through \c WDP3 bits).
+ 130:/usr/lib/avr/include/avr/wdt.h **** 
+ 131:/usr/lib/avr/include/avr/wdt.h ****    See also the symbolic constants \c WDTO_15MS et al.
+ 132:/usr/lib/avr/include/avr/wdt.h **** */
+ 133:/usr/lib/avr/include/avr/wdt.h **** 
+ 134:/usr/lib/avr/include/avr/wdt.h **** 
+ 135:/usr/lib/avr/include/avr/wdt.h **** #if defined(__AVR_XMEGA__)
+ 136:/usr/lib/avr/include/avr/wdt.h **** 
+ 137:/usr/lib/avr/include/avr/wdt.h **** /*
+ 138:/usr/lib/avr/include/avr/wdt.h ****    wdt_enable(timeout) for xmega devices
+ 139:/usr/lib/avr/include/avr/wdt.h **** ** write signature (CCP_IOREG_gc) that enables change of protected I/O
+ 140:/usr/lib/avr/include/avr/wdt.h ****    registers to the CCP register
+ 141:/usr/lib/avr/include/avr/wdt.h **** ** At the same time,
+ 142:/usr/lib/avr/include/avr/wdt.h ****    1) set WDT change enable (WDT_CEN_bm)
+ 143:/usr/lib/avr/include/avr/wdt.h ****    2) enable WDT (WDT_ENABLE_bm)
+ 144:/usr/lib/avr/include/avr/wdt.h ****    3) set timeout (timeout)
+ 145:/usr/lib/avr/include/avr/wdt.h **** ** Synchronization starts when ENABLE bit of WDT is set. So, wait till it
+ 146:/usr/lib/avr/include/avr/wdt.h ****    finishes (SYNCBUSY of STATUS register is automatically cleared after the
+ 147:/usr/lib/avr/include/avr/wdt.h ****    sync is finished).
+ 148:/usr/lib/avr/include/avr/wdt.h **** */
+ 149:/usr/lib/avr/include/avr/wdt.h **** #define wdt_enable(timeout) \
+ 150:/usr/lib/avr/include/avr/wdt.h **** do { \
+ 151:/usr/lib/avr/include/avr/wdt.h **** uint8_t temp; \
+ 152:/usr/lib/avr/include/avr/wdt.h **** __asm__ __volatile__ (         \
+ 153:/usr/lib/avr/include/avr/wdt.h ****     "in __tmp_reg__, %[rampd]"              "\n\t" \
+ 154:/usr/lib/avr/include/avr/wdt.h ****     "out %[rampd], __zero_reg__"            "\n\t" \
+ 155:/usr/lib/avr/include/avr/wdt.h ****     "out %[ccp_reg], %[ioreg_cen_mask]"     "\n\t" \
+ 156:/usr/lib/avr/include/avr/wdt.h ****     "sts %[wdt_reg], %[wdt_enable_timeout]" "\n\t" \
+ 157:/usr/lib/avr/include/avr/wdt.h ****     "1:lds %[tmp], %[wdt_status_reg]"       "\n\t" \
+ 158:/usr/lib/avr/include/avr/wdt.h ****     "sbrc %[tmp], %[wdt_syncbusy_bit]"      "\n\t" \
+ 159:/usr/lib/avr/include/avr/wdt.h ****     "rjmp 1b"                               "\n\t" \
+ 160:/usr/lib/avr/include/avr/wdt.h ****     "out %[rampd], __tmp_reg__"             "\n\t" \
+ 161:/usr/lib/avr/include/avr/wdt.h ****     : [tmp]                "=r" (temp) \
+ 162:/usr/lib/avr/include/avr/wdt.h ****     : [rampd]              "I" (_SFR_IO_ADDR(RAMPD)),      \
+ 163:/usr/lib/avr/include/avr/wdt.h ****       [ccp_reg]            "I" (_SFR_IO_ADDR(CCP)),        \
+ 164:/usr/lib/avr/include/avr/wdt.h ****       [ioreg_cen_mask]     "r" ((uint8_t)CCP_IOREG_gc),     \
+ 165:/usr/lib/avr/include/avr/wdt.h ****       [wdt_reg]            "n" (_SFR_MEM_ADDR(WDT_CTRL)),   \
+ 166:/usr/lib/avr/include/avr/wdt.h ****       [wdt_enable_timeout] "r" ((uint8_t)(WDT_CEN_bm | WDT_ENABLE_bm | timeout)), \
+ 167:/usr/lib/avr/include/avr/wdt.h ****       [wdt_status_reg]     "n" (_SFR_MEM_ADDR(WDT_STATUS)), \
+ 168:/usr/lib/avr/include/avr/wdt.h ****       [wdt_syncbusy_bit]   "I" (WDT_SYNCBUSY_bm)            \
+ 169:/usr/lib/avr/include/avr/wdt.h ****     : "r0" \
+ 170:/usr/lib/avr/include/avr/wdt.h **** ); \
+ 171:/usr/lib/avr/include/avr/wdt.h **** } while(0)
+ 172:/usr/lib/avr/include/avr/wdt.h **** 
+ 173:/usr/lib/avr/include/avr/wdt.h **** #define wdt_disable() \
+ 174:/usr/lib/avr/include/avr/wdt.h **** __asm__ __volatile__ (  \
+ 175:/usr/lib/avr/include/avr/wdt.h ****     "in __tmp_reg__, %[rampd]"          "\n\t" \
+ 176:/usr/lib/avr/include/avr/wdt.h ****     "out %[rampd], __zero_reg__"        "\n\t" \
+ 177:/usr/lib/avr/include/avr/wdt.h ****     "out %[ccp_reg], %[ioreg_cen_mask]" "\n\t" \
+ 178:/usr/lib/avr/include/avr/wdt.h ****     "sts %[wdt_reg], %[disable_mask]"   "\n\t" \
+ 179:/usr/lib/avr/include/avr/wdt.h ****     "out %[rampd], __tmp_reg__"         "\n\t" \
+ 180:/usr/lib/avr/include/avr/wdt.h ****     : \
+ 181:/usr/lib/avr/include/avr/wdt.h ****     : [rampd]             "I" (_SFR_IO_ADDR(RAMPD)),    \
+ 182:/usr/lib/avr/include/avr/wdt.h ****       [ccp_reg]           "I" (_SFR_IO_ADDR(CCP)),      \
+ 183:/usr/lib/avr/include/avr/wdt.h ****       [ioreg_cen_mask]    "r" ((uint8_t)CCP_IOREG_gc),   \
+ 184:/usr/lib/avr/include/avr/wdt.h ****       [wdt_reg]           "n" (_SFR_MEM_ADDR(WDT_CTRL)), \
+ 185:/usr/lib/avr/include/avr/wdt.h ****       [disable_mask]      "r" ((uint8_t)((~WDT_ENABLE_bm) | WDT_CEN_bm)) \
+ 186:/usr/lib/avr/include/avr/wdt.h ****     : "r0" \
+ 187:/usr/lib/avr/include/avr/wdt.h **** );
+ 188:/usr/lib/avr/include/avr/wdt.h **** 
+ 189:/usr/lib/avr/include/avr/wdt.h **** #elif defined(__AVR_TINY__)
+ 190:/usr/lib/avr/include/avr/wdt.h **** 
+ 191:/usr/lib/avr/include/avr/wdt.h **** #define wdt_enable(value) \
+ 192:/usr/lib/avr/include/avr/wdt.h **** __asm__ __volatile__ ( \
+ 193:/usr/lib/avr/include/avr/wdt.h ****     "in __tmp_reg__,__SREG__" "\n\t"  \
+ 194:/usr/lib/avr/include/avr/wdt.h ****     "cli" "\n\t"  \
+ 195:/usr/lib/avr/include/avr/wdt.h ****     "wdr" "\n\t"  \
+ 196:/usr/lib/avr/include/avr/wdt.h ****     "out %[CCPADDRESS],%[SIGNATURE]" "\n\t"  \
+ 197:/usr/lib/avr/include/avr/wdt.h ****     "out %[WDTREG],%[WDVALUE]" "\n\t"  \
+ 198:/usr/lib/avr/include/avr/wdt.h ****     "out __SREG__,__tmp_reg__" "\n\t"  \
+ 199:/usr/lib/avr/include/avr/wdt.h ****     : /* no outputs */  \
+ 200:/usr/lib/avr/include/avr/wdt.h ****     : [CCPADDRESS] "I" (_SFR_IO_ADDR(CCP)),  \
+ 201:/usr/lib/avr/include/avr/wdt.h ****       [SIGNATURE] "r" ((uint8_t)0xD8), \
+ 202:/usr/lib/avr/include/avr/wdt.h ****       [WDTREG] "I" (_SFR_IO_ADDR(_WD_CONTROL_REG)), \
+ 203:/usr/lib/avr/include/avr/wdt.h ****       [WDVALUE] "r" ((uint8_t)((value & 0x08 ? _WD_PS3_MASK : 0x00) \
+ 204:/usr/lib/avr/include/avr/wdt.h ****       | _BV(WDE) | (value & 0x07) )) \
+ 205:/usr/lib/avr/include/avr/wdt.h ****     : "r16" \
+ 206:/usr/lib/avr/include/avr/wdt.h **** )
+ 207:/usr/lib/avr/include/avr/wdt.h **** 
+ 208:/usr/lib/avr/include/avr/wdt.h **** #define wdt_disable() \
+ 209:/usr/lib/avr/include/avr/wdt.h **** do { \
+ 210:/usr/lib/avr/include/avr/wdt.h **** uint8_t temp_wd; \
+ 211:/usr/lib/avr/include/avr/wdt.h **** __asm__ __volatile__ ( \
+ 212:/usr/lib/avr/include/avr/wdt.h ****     "in __tmp_reg__,__SREG__" "\n\t"  \
+ 213:/usr/lib/avr/include/avr/wdt.h ****     "cli" "\n\t"  \
+ 214:/usr/lib/avr/include/avr/wdt.h ****     "wdr" "\n\t"  \
+ 215:/usr/lib/avr/include/avr/wdt.h ****     "out %[CCPADDRESS],%[SIGNATURE]" "\n\t"  \
+ 216:/usr/lib/avr/include/avr/wdt.h ****     "in  %[TEMP_WD],%[WDTREG]" "\n\t" \
+ 217:/usr/lib/avr/include/avr/wdt.h ****     "cbr %[TEMP_WD],%[WDVALUE]" "\n\t" \
+ 218:/usr/lib/avr/include/avr/wdt.h ****     "out %[WDTREG],%[TEMP_WD]" "\n\t" \
+ 219:/usr/lib/avr/include/avr/wdt.h ****     "out __SREG__,__tmp_reg__" "\n\t" \
+ 220:/usr/lib/avr/include/avr/wdt.h ****     : /*no output */ \
+ 221:/usr/lib/avr/include/avr/wdt.h ****     : [CCPADDRESS] "I" (_SFR_IO_ADDR(CCP)), \
+ 222:/usr/lib/avr/include/avr/wdt.h ****       [SIGNATURE] "r" ((uint8_t)0xD8), \
+ 223:/usr/lib/avr/include/avr/wdt.h ****       [WDTREG] "I" (_SFR_IO_ADDR(_WD_CONTROL_REG)), \
+ 224:/usr/lib/avr/include/avr/wdt.h ****       [TEMP_WD] "d" (temp_wd), \
+ 225:/usr/lib/avr/include/avr/wdt.h ****       [WDVALUE] "n" (1 << WDE) \
+ 226:/usr/lib/avr/include/avr/wdt.h ****     : "r16" \
+ 227:/usr/lib/avr/include/avr/wdt.h **** ); \
+ 228:/usr/lib/avr/include/avr/wdt.h **** }while(0)
+ 229:/usr/lib/avr/include/avr/wdt.h **** 
+ 230:/usr/lib/avr/include/avr/wdt.h **** #elif defined(CCP)
+ 231:/usr/lib/avr/include/avr/wdt.h **** 
+ 232:/usr/lib/avr/include/avr/wdt.h **** static __inline__
+ 233:/usr/lib/avr/include/avr/wdt.h **** __attribute__ ((__always_inline__))
+ 234:/usr/lib/avr/include/avr/wdt.h **** void wdt_enable (const uint8_t value)
+ 235:/usr/lib/avr/include/avr/wdt.h **** {
+ 236:/usr/lib/avr/include/avr/wdt.h **** 	if (!_SFR_IO_REG_P (CCP) && !_SFR_IO_REG_P (_WD_CONTROL_REG))
+ 237:/usr/lib/avr/include/avr/wdt.h **** 	{
+ 238:/usr/lib/avr/include/avr/wdt.h **** 		__asm__ __volatile__ (
+ 239:/usr/lib/avr/include/avr/wdt.h **** 			"in __tmp_reg__,__SREG__" "\n\t"
+ 240:/usr/lib/avr/include/avr/wdt.h **** 			"cli" "\n\t"
+ 241:/usr/lib/avr/include/avr/wdt.h **** 			"wdr" "\n\t"
+ 242:/usr/lib/avr/include/avr/wdt.h **** 			"sts %[CCPADDRESS],%[SIGNATURE]" "\n\t"
+ 243:/usr/lib/avr/include/avr/wdt.h **** 			"sts %[WDTREG],%[WDVALUE]" "\n\t"
+ 244:/usr/lib/avr/include/avr/wdt.h **** 			"out __SREG__,__tmp_reg__" "\n\t"
+ 245:/usr/lib/avr/include/avr/wdt.h **** 			: /* no outputs */
+ 246:/usr/lib/avr/include/avr/wdt.h **** 			: [CCPADDRESS] "n" (_SFR_MEM_ADDR(CCP)),
+ 247:/usr/lib/avr/include/avr/wdt.h **** 			[SIGNATURE] "r" ((uint8_t)0xD8),
+ 248:/usr/lib/avr/include/avr/wdt.h **** 			[WDTREG] "n" (_SFR_MEM_ADDR(_WD_CONTROL_REG)),
+ 249:/usr/lib/avr/include/avr/wdt.h **** 			[WDVALUE] "r" ((uint8_t)((value & 0x08 ? _WD_PS3_MASK : 0x00)
+ 250:/usr/lib/avr/include/avr/wdt.h **** 				| _BV(WDE) | (value & 0x07) ))
+ 251:/usr/lib/avr/include/avr/wdt.h **** 			: "r0"
+ 252:/usr/lib/avr/include/avr/wdt.h **** 			);
+ 253:/usr/lib/avr/include/avr/wdt.h **** 	}
+ 254:/usr/lib/avr/include/avr/wdt.h **** 	else if (!_SFR_IO_REG_P (CCP) && _SFR_IO_REG_P (_WD_CONTROL_REG))
+ 255:/usr/lib/avr/include/avr/wdt.h **** 	{
+ 256:/usr/lib/avr/include/avr/wdt.h **** 		__asm__ __volatile__ (
+ 257:/usr/lib/avr/include/avr/wdt.h **** 			"in __tmp_reg__,__SREG__" "\n\t"
+ 258:/usr/lib/avr/include/avr/wdt.h **** 			"cli" "\n\t"
+ 259:/usr/lib/avr/include/avr/wdt.h **** 			"wdr" "\n\t"
+ 260:/usr/lib/avr/include/avr/wdt.h **** 			"sts %[CCPADDRESS],%[SIGNATURE]" "\n\t"
+ 261:/usr/lib/avr/include/avr/wdt.h **** 			"out %[WDTREG],%[WDVALUE]" "\n\t"
+ 262:/usr/lib/avr/include/avr/wdt.h **** 			"out __SREG__,__tmp_reg__" "\n\t"
+ 263:/usr/lib/avr/include/avr/wdt.h **** 			: /* no outputs */
+ 264:/usr/lib/avr/include/avr/wdt.h **** 			: [CCPADDRESS] "n" (_SFR_MEM_ADDR(CCP)),
+ 265:/usr/lib/avr/include/avr/wdt.h **** 			[SIGNATURE] "r" ((uint8_t)0xD8),
+ 266:/usr/lib/avr/include/avr/wdt.h **** 			[WDTREG] "I" (_SFR_IO_ADDR(_WD_CONTROL_REG)),
+ 267:/usr/lib/avr/include/avr/wdt.h **** 			[WDVALUE] "r" ((uint8_t)((value & 0x08 ? _WD_PS3_MASK : 0x00)
+ 268:/usr/lib/avr/include/avr/wdt.h **** 				| _BV(WDE) | (value & 0x07) ))
+ 269:/usr/lib/avr/include/avr/wdt.h **** 			: "r0"
+ 270:/usr/lib/avr/include/avr/wdt.h **** 			);
+ 271:/usr/lib/avr/include/avr/wdt.h **** 	}
+ 272:/usr/lib/avr/include/avr/wdt.h **** 	else if (_SFR_IO_REG_P (CCP) && !_SFR_IO_REG_P (_WD_CONTROL_REG))
+ 273:/usr/lib/avr/include/avr/wdt.h **** 	{
+ 274:/usr/lib/avr/include/avr/wdt.h **** 		__asm__ __volatile__ (
+ 275:/usr/lib/avr/include/avr/wdt.h **** 			"in __tmp_reg__,__SREG__" "\n\t"
+ 276:/usr/lib/avr/include/avr/wdt.h **** 			"cli" "\n\t"
+ 277:/usr/lib/avr/include/avr/wdt.h **** 			"wdr" "\n\t"
+ 278:/usr/lib/avr/include/avr/wdt.h **** 			"out %[CCPADDRESS],%[SIGNATURE]" "\n\t"
+ 279:/usr/lib/avr/include/avr/wdt.h **** 			"sts %[WDTREG],%[WDVALUE]" "\n\t"
+ 280:/usr/lib/avr/include/avr/wdt.h **** 			"out __SREG__,__tmp_reg__" "\n\t"
+ 281:/usr/lib/avr/include/avr/wdt.h **** 			: /* no outputs */
+ 282:/usr/lib/avr/include/avr/wdt.h **** 			: [CCPADDRESS] "I" (_SFR_IO_ADDR(CCP)),
+ 283:/usr/lib/avr/include/avr/wdt.h **** 			[SIGNATURE] "r" ((uint8_t)0xD8),
+ 284:/usr/lib/avr/include/avr/wdt.h **** 			[WDTREG] "n" (_SFR_MEM_ADDR(_WD_CONTROL_REG)),
+ 285:/usr/lib/avr/include/avr/wdt.h **** 			[WDVALUE] "r" ((uint8_t)((value & 0x08 ? _WD_PS3_MASK : 0x00)
+ 286:/usr/lib/avr/include/avr/wdt.h **** 				| _BV(WDE) | (value & 0x07) ))
+ 287:/usr/lib/avr/include/avr/wdt.h **** 			: "r0"
+ 288:/usr/lib/avr/include/avr/wdt.h **** 			);
+ 289:/usr/lib/avr/include/avr/wdt.h **** 	}
+ 290:/usr/lib/avr/include/avr/wdt.h **** 	else
+ 291:/usr/lib/avr/include/avr/wdt.h ****  	{
+ 292:/usr/lib/avr/include/avr/wdt.h **** 		__asm__ __volatile__ (
+ 293:/usr/lib/avr/include/avr/wdt.h **** 			"in __tmp_reg__,__SREG__" "\n\t"
+ 294:/usr/lib/avr/include/avr/wdt.h **** 			"cli" "\n\t"
+ 295:/usr/lib/avr/include/avr/wdt.h **** 			"wdr" "\n\t"
+ 296:/usr/lib/avr/include/avr/wdt.h **** 			"out %[CCPADDRESS],%[SIGNATURE]" "\n\t"
+ 297:/usr/lib/avr/include/avr/wdt.h **** 			"out %[WDTREG],%[WDVALUE]" "\n\t"
+ 298:/usr/lib/avr/include/avr/wdt.h **** 			"out __SREG__,__tmp_reg__" "\n\t"
+ 299:/usr/lib/avr/include/avr/wdt.h **** 			: /* no outputs */
+ 300:/usr/lib/avr/include/avr/wdt.h **** 			: [CCPADDRESS] "I" (_SFR_IO_ADDR(CCP)),
+ 301:/usr/lib/avr/include/avr/wdt.h **** 			[SIGNATURE] "r" ((uint8_t)0xD8),
+ 302:/usr/lib/avr/include/avr/wdt.h **** 			[WDTREG] "I" (_SFR_IO_ADDR(_WD_CONTROL_REG)),
+ 303:/usr/lib/avr/include/avr/wdt.h **** 			[WDVALUE] "r" ((uint8_t)((value & 0x08 ? _WD_PS3_MASK : 0x00)
+ 304:/usr/lib/avr/include/avr/wdt.h **** 				| _BV(WDE) | (value & 0x07) ))
+ 305:/usr/lib/avr/include/avr/wdt.h **** 			: "r0"
+ 306:/usr/lib/avr/include/avr/wdt.h **** 			);
+ 307:/usr/lib/avr/include/avr/wdt.h **** 	}
+ 308:/usr/lib/avr/include/avr/wdt.h **** }
+ 309:/usr/lib/avr/include/avr/wdt.h **** 
+ 310:/usr/lib/avr/include/avr/wdt.h **** static __inline__
+ 311:/usr/lib/avr/include/avr/wdt.h **** __attribute__ ((__always_inline__))
+ 312:/usr/lib/avr/include/avr/wdt.h **** void wdt_disable (void)
+ 313:/usr/lib/avr/include/avr/wdt.h **** {
+ 314:/usr/lib/avr/include/avr/wdt.h **** 	if (!_SFR_IO_REG_P (CCP) && !_SFR_IO_REG_P(_WD_CONTROL_REG))
+ 315:/usr/lib/avr/include/avr/wdt.h **** 	{
+ 316:/usr/lib/avr/include/avr/wdt.h ****         uint8_t temp_wd;
+ 317:/usr/lib/avr/include/avr/wdt.h ****         __asm__ __volatile__ (
+ 318:/usr/lib/avr/include/avr/wdt.h **** 				"in __tmp_reg__,__SREG__" "\n\t"
+ 319:/usr/lib/avr/include/avr/wdt.h **** 				"cli" "\n\t"
+ 320:/usr/lib/avr/include/avr/wdt.h **** 				"wdr" "\n\t"
+ 321:/usr/lib/avr/include/avr/wdt.h **** 				"sts %[CCPADDRESS],%[SIGNATURE]" "\n\t"
+ 322:/usr/lib/avr/include/avr/wdt.h **** 				"lds %[TEMP_WD],%[WDTREG]" "\n\t"
+ 323:/usr/lib/avr/include/avr/wdt.h **** 				"cbr %[TEMP_WD],%[WDVALUE]" "\n\t"
+ 324:/usr/lib/avr/include/avr/wdt.h **** 				"sts %[WDTREG],%[TEMP_WD]" "\n\t"
+ 325:/usr/lib/avr/include/avr/wdt.h **** 				"out __SREG__,__tmp_reg__" "\n\t"
+ 326:/usr/lib/avr/include/avr/wdt.h **** 				: /*no output */
+ 327:/usr/lib/avr/include/avr/wdt.h **** 				: [CCPADDRESS] "n" (_SFR_MEM_ADDR(CCP)),
+ 328:/usr/lib/avr/include/avr/wdt.h **** 				[SIGNATURE] "r" ((uint8_t)0xD8),
+ 329:/usr/lib/avr/include/avr/wdt.h **** 				[WDTREG] "n" (_SFR_MEM_ADDR(_WD_CONTROL_REG)),
+ 330:/usr/lib/avr/include/avr/wdt.h **** 				[TEMP_WD] "d" (temp_wd),
+ 331:/usr/lib/avr/include/avr/wdt.h **** 				[WDVALUE] "n" (1 << WDE)
+ 332:/usr/lib/avr/include/avr/wdt.h **** 				: "r0"
+ 333:/usr/lib/avr/include/avr/wdt.h **** 				);
+ 334:/usr/lib/avr/include/avr/wdt.h **** 	}
+ 335:/usr/lib/avr/include/avr/wdt.h **** 	else if (!_SFR_IO_REG_P (CCP) && _SFR_IO_REG_P(_WD_CONTROL_REG))
+ 336:/usr/lib/avr/include/avr/wdt.h **** 	{
+ 337:/usr/lib/avr/include/avr/wdt.h ****         uint8_t temp_wd;
+ 338:/usr/lib/avr/include/avr/wdt.h ****         __asm__ __volatile__ (
+ 339:/usr/lib/avr/include/avr/wdt.h **** 				"in __tmp_reg__,__SREG__" "\n\t"
+ 340:/usr/lib/avr/include/avr/wdt.h **** 				"cli" "\n\t"
+ 341:/usr/lib/avr/include/avr/wdt.h **** 				"wdr" "\n\t"
+ 342:/usr/lib/avr/include/avr/wdt.h **** 				"sts %[CCPADDRESS],%[SIGNATURE]" "\n\t"
+ 343:/usr/lib/avr/include/avr/wdt.h **** 				"in %[TEMP_WD],%[WDTREG]" "\n\t"
+ 344:/usr/lib/avr/include/avr/wdt.h **** 				"cbr %[TEMP_WD],%[WDVALUE]" "\n\t"
+ 345:/usr/lib/avr/include/avr/wdt.h **** 				"out %[WDTREG],%[TEMP_WD]" "\n\t"
+ 346:/usr/lib/avr/include/avr/wdt.h **** 				"out __SREG__,__tmp_reg__" "\n\t"
+ 347:/usr/lib/avr/include/avr/wdt.h **** 				: /*no output */
+ 348:/usr/lib/avr/include/avr/wdt.h **** 				: [CCPADDRESS] "n" (_SFR_MEM_ADDR(CCP)),
+ 349:/usr/lib/avr/include/avr/wdt.h **** 				[SIGNATURE] "r" ((uint8_t)0xD8),
+ 350:/usr/lib/avr/include/avr/wdt.h **** 				[WDTREG] "I" (_SFR_IO_ADDR(_WD_CONTROL_REG)),
+ 351:/usr/lib/avr/include/avr/wdt.h **** 				[TEMP_WD] "d" (temp_wd),
+ 352:/usr/lib/avr/include/avr/wdt.h **** 				[WDVALUE] "n" (1 << WDE)
+ 353:/usr/lib/avr/include/avr/wdt.h **** 				: "r0"
+ 354:/usr/lib/avr/include/avr/wdt.h **** 				);
+ 355:/usr/lib/avr/include/avr/wdt.h **** 	}
+ 356:/usr/lib/avr/include/avr/wdt.h **** 	else if (_SFR_IO_REG_P (CCP) && !_SFR_IO_REG_P(_WD_CONTROL_REG))
+ 357:/usr/lib/avr/include/avr/wdt.h **** 	{
+ 358:/usr/lib/avr/include/avr/wdt.h ****         uint8_t temp_wd;
+ 359:/usr/lib/avr/include/avr/wdt.h ****         __asm__ __volatile__ (
+ 360:/usr/lib/avr/include/avr/wdt.h **** 				"in __tmp_reg__,__SREG__" "\n\t"
+ 361:/usr/lib/avr/include/avr/wdt.h **** 				"cli" "\n\t"
+ 362:/usr/lib/avr/include/avr/wdt.h **** 				"wdr" "\n\t"
+ 363:/usr/lib/avr/include/avr/wdt.h **** 				"out %[CCPADDRESS],%[SIGNATURE]" "\n\t"
+ 364:/usr/lib/avr/include/avr/wdt.h **** 				"lds %[TEMP_WD],%[WDTREG]" "\n\t"
+ 365:/usr/lib/avr/include/avr/wdt.h **** 				"cbr %[TEMP_WD],%[WDVALUE]" "\n\t"
+ 366:/usr/lib/avr/include/avr/wdt.h **** 				"sts %[WDTREG],%[TEMP_WD]" "\n\t"
+ 367:/usr/lib/avr/include/avr/wdt.h **** 				"out __SREG__,__tmp_reg__" "\n\t"
+ 368:/usr/lib/avr/include/avr/wdt.h **** 				: /*no output */
+ 369:/usr/lib/avr/include/avr/wdt.h **** 				: [CCPADDRESS] "I" (_SFR_IO_ADDR(CCP)),
+ 370:/usr/lib/avr/include/avr/wdt.h **** 				[SIGNATURE] "r" ((uint8_t)0xD8),
+ 371:/usr/lib/avr/include/avr/wdt.h **** 				[WDTREG] "n" (_SFR_MEM_ADDR(_WD_CONTROL_REG)),
+ 372:/usr/lib/avr/include/avr/wdt.h **** 				[TEMP_WD] "d" (temp_wd),
+ 373:/usr/lib/avr/include/avr/wdt.h **** 				[WDVALUE] "n" (1 << WDE)
+ 374:/usr/lib/avr/include/avr/wdt.h **** 				: "r0"
+ 375:/usr/lib/avr/include/avr/wdt.h **** 				);
+ 376:/usr/lib/avr/include/avr/wdt.h **** 	}
+ 377:/usr/lib/avr/include/avr/wdt.h **** 	else
+ 378:/usr/lib/avr/include/avr/wdt.h **** 	{
+ 379:/usr/lib/avr/include/avr/wdt.h ****         uint8_t temp_wd;
+ 380:/usr/lib/avr/include/avr/wdt.h ****         __asm__ __volatile__ (
+ 381:/usr/lib/avr/include/avr/wdt.h **** 				"in __tmp_reg__,__SREG__" "\n\t"
+ 382:/usr/lib/avr/include/avr/wdt.h **** 				"cli" "\n\t"
+ 383:/usr/lib/avr/include/avr/wdt.h **** 				"wdr" "\n\t"
+ 384:/usr/lib/avr/include/avr/wdt.h **** 				"out %[CCPADDRESS],%[SIGNATURE]" "\n\t"
+ 385:/usr/lib/avr/include/avr/wdt.h **** 				"in %[TEMP_WD],%[WDTREG]" "\n\t"
+ 386:/usr/lib/avr/include/avr/wdt.h **** 				"cbr %[TEMP_WD],%[WDVALUE]" "\n\t"
+ 387:/usr/lib/avr/include/avr/wdt.h **** 				"out %[WDTREG],%[TEMP_WD]" "\n\t"
+ 388:/usr/lib/avr/include/avr/wdt.h **** 				"out __SREG__,__tmp_reg__" "\n\t"
+ 389:/usr/lib/avr/include/avr/wdt.h **** 				: /*no output */
+ 390:/usr/lib/avr/include/avr/wdt.h **** 				: [CCPADDRESS] "I" (_SFR_IO_ADDR(CCP)),
+ 391:/usr/lib/avr/include/avr/wdt.h **** 				[SIGNATURE] "r" ((uint8_t)0xD8),
+ 392:/usr/lib/avr/include/avr/wdt.h **** 				[WDTREG] "I" (_SFR_IO_ADDR(_WD_CONTROL_REG)),
+ 393:/usr/lib/avr/include/avr/wdt.h **** 				[TEMP_WD] "d" (temp_wd),
+ 394:/usr/lib/avr/include/avr/wdt.h **** 				[WDVALUE] "n" (1 << WDE)
+ 395:/usr/lib/avr/include/avr/wdt.h **** 				: "r0"
+ 396:/usr/lib/avr/include/avr/wdt.h **** 				);
+ 397:/usr/lib/avr/include/avr/wdt.h **** 	}
+ 398:/usr/lib/avr/include/avr/wdt.h **** }
+ 399:/usr/lib/avr/include/avr/wdt.h **** 
+ 400:/usr/lib/avr/include/avr/wdt.h **** #else
+ 401:/usr/lib/avr/include/avr/wdt.h **** 
+ 402:/usr/lib/avr/include/avr/wdt.h **** static __inline__
+ 403:/usr/lib/avr/include/avr/wdt.h **** __attribute__ ((__always_inline__))
+ 404:/usr/lib/avr/include/avr/wdt.h **** void wdt_enable (const uint8_t value)
+ 405:/usr/lib/avr/include/avr/wdt.h **** {
+ 406:/usr/lib/avr/include/avr/wdt.h **** 	if (_SFR_IO_REG_P (_WD_CONTROL_REG))
+ 407:/usr/lib/avr/include/avr/wdt.h **** 	{
+ 408:/usr/lib/avr/include/avr/wdt.h **** 		__asm__ __volatile__ (
+ 409:/usr/lib/avr/include/avr/wdt.h **** 				"in __tmp_reg__,__SREG__" "\n\t"
+ 410:/usr/lib/avr/include/avr/wdt.h **** 				"cli" "\n\t"
+ 411:/usr/lib/avr/include/avr/wdt.h **** 				"wdr" "\n\t"
+ 412:/usr/lib/avr/include/avr/wdt.h **** 				"out %0, %1" "\n\t"
+ 413:/usr/lib/avr/include/avr/wdt.h **** 				"out __SREG__,__tmp_reg__" "\n\t"
+ 414:/usr/lib/avr/include/avr/wdt.h **** 				"out %0, %2" "\n \t"
+ 415:/usr/lib/avr/include/avr/wdt.h **** 				: /* no outputs */
+ 416:/usr/lib/avr/include/avr/wdt.h **** 				: "I" (_SFR_IO_ADDR(_WD_CONTROL_REG)),
+ 417:/usr/lib/avr/include/avr/wdt.h **** 				"r" ((uint8_t)(_BV(_WD_CHANGE_BIT) | _BV(WDE))),
+ 418:/usr/lib/avr/include/avr/wdt.h **** 				"r" ((uint8_t) ((value & 0x08 ? _WD_PS3_MASK : 0x00) |
+ 419:/usr/lib/avr/include/avr/wdt.h **** 						_BV(WDE) | (value & 0x07)) )
+ 420:/usr/lib/avr/include/avr/wdt.h **** 				: "r0"
+ 421:/usr/lib/avr/include/avr/wdt.h **** 		);
+ 422:/usr/lib/avr/include/avr/wdt.h **** 	}
+ 423:/usr/lib/avr/include/avr/wdt.h **** 	else
+ 424:/usr/lib/avr/include/avr/wdt.h **** 	{
+ 425:/usr/lib/avr/include/avr/wdt.h **** 		__asm__ __volatile__ (
+ 426:/usr/lib/avr/include/avr/wdt.h **** 				"in __tmp_reg__,__SREG__" "\n\t"
+ 427:/usr/lib/avr/include/avr/wdt.h **** 				"cli" "\n\t"
+ 428:/usr/lib/avr/include/avr/wdt.h **** 				"wdr" "\n\t"
+ 429:/usr/lib/avr/include/avr/wdt.h **** 				"sts %0, %1" "\n\t"
+ 430:/usr/lib/avr/include/avr/wdt.h **** 				"out __SREG__,__tmp_reg__" "\n\t"
+ 431:/usr/lib/avr/include/avr/wdt.h **** 				"sts %0, %2" "\n \t"
+ 432:/usr/lib/avr/include/avr/wdt.h **** 				: /* no outputs */
+ 433:/usr/lib/avr/include/avr/wdt.h **** 				: "n" (_SFR_MEM_ADDR(_WD_CONTROL_REG)),
+ 434:/usr/lib/avr/include/avr/wdt.h **** 				"r" ((uint8_t)(_BV(_WD_CHANGE_BIT) | _BV(WDE))),
+ 435:/usr/lib/avr/include/avr/wdt.h **** 				"r" ((uint8_t) ((value & 0x08 ? _WD_PS3_MASK : 0x00) |
+ 436:/usr/lib/avr/include/avr/wdt.h **** 						_BV(WDE) | (value & 0x07)) )
+ 437:/usr/lib/avr/include/avr/wdt.h **** 				: "r0"
+ 438:/usr/lib/avr/include/avr/wdt.h **** 		);
+ 439:/usr/lib/avr/include/avr/wdt.h **** 	}
+ 440:/usr/lib/avr/include/avr/wdt.h **** }
+ 441:/usr/lib/avr/include/avr/wdt.h **** 
+ 442:/usr/lib/avr/include/avr/wdt.h **** static __inline__
+ 443:/usr/lib/avr/include/avr/wdt.h **** __attribute__ ((__always_inline__))
+ 444:/usr/lib/avr/include/avr/wdt.h **** void wdt_disable (void)
+ 445:/usr/lib/avr/include/avr/wdt.h **** {
+ 446:/usr/lib/avr/include/avr/wdt.h **** 	if (_SFR_IO_REG_P (_WD_CONTROL_REG))
+ 447:/usr/lib/avr/include/avr/wdt.h **** 	{
+ 448:/usr/lib/avr/include/avr/wdt.h ****         uint8_t register temp_reg;
+ 449:/usr/lib/avr/include/avr/wdt.h **** 		__asm__ __volatile__ (
+ 361               	.LM35:
+ 362               	/* #APP */
+ 363               	 ;  449 "/usr/lib/avr/include/avr/wdt.h" 1
+ 364 00b6 0FB6      		in __tmp_reg__,__SREG__
+ 365 00b8 F894      		cli
+ 366 00ba A895      		wdr
+ 367 00bc 81B5      		in  r24,33
+ 368 00be 8861      		ori r24,24
+ 369 00c0 81BD      		out 33,r24
+ 370 00c2 11BC      		out 33,__zero_reg__
+ 371 00c4 0FBE      		out __SREG__,__tmp_reg__
+ 372               		
+ 373               	 ;  0 "" 2
+ 374               	/* #NOAPP */
+ 375               	.LBE23:
+ 376               	.LBE22:
+ 378               	.Ltext2:
+ 368:main.c        **** 
+ 380               	.LM36:
+ 381 00c6 88EE      		ldi r24,lo8(-24)
+ 382 00c8 93E0      		ldi r25,lo8(3)
+ 383 00ca 00D0      		rcall delay_ten_us
+ 370:main.c        ****   sleep_cpu();                    // put CPU into Power Down Sleep Mode
+ 385               	.LM37:
+ 386 00cc 80E3      		ldi r24,lo8(48)
+ 387 00ce 85BF      		out 0x35,r24
+ 371:main.c        **** }
+ 389               	.LM38:
+ 390               	/* #APP */
+ 391               	 ;  371 "main.c" 1
+ 392 00d0 8895      		sleep
+ 393               		
+ 394               	 ;  0 "" 2
+ 395               	/* #NOAPP */
+ 396 00d2 0895      		ret
+ 398               	.Lscope4:
+ 400               		.stabd	78,0,0
+ 402               	.global	quickflashLED
+ 404               	quickflashLED:
+ 405               		.stabd	46,0,0
+ 395:main.c        **** 
+ 396:main.c        **** 
+ 397:main.c        **** // This function quickly pulses the visible LED (connected to PB0, pin 5)
+ 398:main.c        **** // This will indicate to the user that a code is being transmitted
+ 399:main.c        **** void quickflashLED( void ) {
+ 407               	.LM39:
+ 408               	.LFBB5:
+ 409               	/* prologue: function */
+ 410               	/* frame size = 0 */
+ 411               	/* stack size = 0 */
+ 412               	.L__stack_usage = 0
+ 400:main.c        ****   PORTB &= ~_BV(LED);   // turn on visible LED at PB0 by pulling pin to ground
+ 414               	.LM40:
+ 415 00d4 C298      		cbi 0x18,2
+ 401:main.c        ****   delay_ten_us(3000);   // 30 millisec delay
+ 417               	.LM41:
+ 418 00d6 88EB      		ldi r24,lo8(-72)
+ 419 00d8 9BE0      		ldi r25,lo8(11)
+ 420 00da 00D0      		rcall delay_ten_us
+ 402:main.c        ****   PORTB |= _BV(LED);    // turn off visible LED at PB0 by pulling pin to +3V
+ 422               	.LM42:
+ 423 00dc C29A      		sbi 0x18,2
+ 424 00de 0895      		ret
+ 426               	.Lscope5:
+ 428               		.stabd	78,0,0
+ 431               	.global	quickflashLEDx
+ 433               	quickflashLEDx:
+ 434               		.stabd	46,0,0
+ 403:main.c        **** }
+ 404:main.c        **** 
+ 405:main.c        **** // This function just flashes the visible LED a couple times, used to
+ 406:main.c        **** // tell the user what region is selected
+ 407:main.c        **** void quickflashLEDx( uint8_t x ) {
+ 436               	.LM43:
+ 437               	.LFBB6:
+ 438 00e0 CF93      		push r28
+ 439               	/* prologue: function */
+ 440               	/* frame size = 0 */
+ 441               	/* stack size = 1 */
+ 442               	.L__stack_usage = 1
+ 443 00e2 C82F      		mov r28,r24
+ 444               	.L21:
+ 408:main.c        ****   quickflashLED();
+ 409:main.c        ****   while(--x) {
+ 410:main.c        ****   	wdt_reset();
+ 411:main.c        **** 	delay_ten_us(15000);     // 150 millisec delay between flahes
+ 412:main.c        **** 	quickflashLED();
+ 446               	.LM44:
+ 447 00e4 00D0      		rcall quickflashLED
+ 409:main.c        ****   	wdt_reset();
+ 449               	.LM45:
+ 450 00e6 C150      		subi r28,lo8(-(-1))
+ 451 00e8 01F0      		breq .L22
+ 410:main.c        **** 	delay_ten_us(15000);     // 150 millisec delay between flahes
+ 453               	.LM46:
+ 454               	/* #APP */
+ 455               	 ;  410 "main.c" 1
+ 456 00ea A895      		wdr
+ 457               	 ;  0 "" 2
+ 411:main.c        **** 	quickflashLED();
+ 459               	.LM47:
+ 460               	/* #NOAPP */
+ 461 00ec 88E9      		ldi r24,lo8(-104)
+ 462 00ee 9AE3      		ldi r25,lo8(58)
+ 463 00f0 00D0      		rcall delay_ten_us
+ 464 00f2 00C0      		rjmp .L21
+ 465               	.L22:
+ 413:main.c        ****   }
+ 414:main.c        ****   wdt_reset();                // kick the dog
+ 467               	.LM48:
+ 468               	/* #APP */
+ 469               	 ;  414 "main.c" 1
+ 470 00f4 A895      		wdr
+ 471               	 ;  0 "" 2
+ 472               	/* epilogue start */
+ 415:main.c        **** }
+ 474               	.LM49:
+ 475               	/* #NOAPP */
+ 476 00f6 CF91      		pop r28
+ 477 00f8 0895      		ret
+ 479               	.Lscope6:
+ 481               		.stabd	78,0,0
+ 484               	.global	flashslowLEDx
+ 486               	flashslowLEDx:
+ 487               		.stabd	46,0,0
+ 416:main.c        **** 
+ 417:main.c        **** // This is like the above but way slower, used for when the tvbgone
+ 418:main.c        **** // crashes and wants to warn the user
+ 419:main.c        **** void flashslowLEDx( uint8_t num_blinks )
+ 420:main.c        **** {
+ 489               	.LM50:
+ 490               	.LFBB7:
+ 491 00fa CF93      		push r28
+ 492 00fc DF93      		push r29
+ 493               	/* prologue: function */
+ 494               	/* frame size = 0 */
+ 495               	/* stack size = 2 */
+ 496               	.L__stack_usage = 2
+ 497 00fe D82F      		mov r29,r24
+ 421:main.c        ****   uint8_t i;
+ 422:main.c        ****   for(i=0;i<num_blinks;i++)
+ 499               	.LM51:
+ 500 0100 C0E0      		ldi r28,0
+ 501               	.L24:
+ 503               	.LM52:
+ 504 0102 CD17      		cp r28,r29
+ 505 0104 01F0      		breq .L26
+ 423:main.c        ****     {
+ 424:main.c        ****       // turn on visible LED at PB0 by pulling pin to ground
+ 425:main.c        ****       PORTB &= ~_BV(LED);    
+ 507               	.LM53:
+ 508 0106 C298      		cbi 0x18,2
+ 426:main.c        ****       delay_ten_us(50000);         // 500 millisec delay
+ 510               	.LM54:
+ 511 0108 80E5      		ldi r24,lo8(80)
+ 512 010a 93EC      		ldi r25,lo8(-61)
+ 513 010c 00D0      		rcall delay_ten_us
+ 427:main.c        ****       wdt_reset();                 // kick the dog
+ 515               	.LM55:
+ 516               	/* #APP */
+ 517               	 ;  427 "main.c" 1
+ 518 010e A895      		wdr
+ 519               	 ;  0 "" 2
+ 428:main.c        ****       // turn off visible LED at PB0 by pulling pin to +3V
+ 429:main.c        ****       PORTB |= _BV(LED);          
+ 521               	.LM56:
+ 522               	/* #NOAPP */
+ 523 0110 C29A      		sbi 0x18,2
+ 430:main.c        ****       delay_ten_us(50000);	   // 500 millisec delay
+ 525               	.LM57:
+ 526 0112 80E5      		ldi r24,lo8(80)
+ 527 0114 93EC      		ldi r25,lo8(-61)
+ 528 0116 00D0      		rcall delay_ten_us
+ 431:main.c        ****       wdt_reset();                 // kick the dog
+ 530               	.LM58:
+ 531               	/* #APP */
+ 532               	 ;  431 "main.c" 1
+ 533 0118 A895      		wdr
+ 534               	 ;  0 "" 2
+ 422:main.c        ****     {
+ 536               	.LM59:
+ 537               	/* #NOAPP */
+ 538 011a CF5F      		subi r28,lo8(-(1))
+ 539 011c 00C0      		rjmp .L24
+ 540               	.L26:
+ 541               	/* epilogue start */
+ 432:main.c        ****     }
+ 433:main.c        **** }
+ 543               	.LM60:
+ 544 011e DF91      		pop r29
+ 545 0120 CF91      		pop r28
+ 546 0122 0895      		ret
+ 551               	.Lscope7:
+ 553               		.stabd	78,0,0
+ 554               		.section	.text.startup,"ax",@progbits
+ 556               	.global	main
+ 558               	main:
+ 559               		.stabd	46,0,0
+ 189:main.c        ****   uint16_t ontime, offtime;
+ 561               	.LM61:
+ 562               	.LFBB8:
+ 563 0000 7F92      		push r7
+ 564 0002 8F92      		push r8
+ 565 0004 9F92      		push r9
+ 566 0006 AF92      		push r10
+ 567 0008 BF92      		push r11
+ 568 000a CF92      		push r12
+ 569 000c DF92      		push r13
+ 570 000e EF92      		push r14
+ 571 0010 FF92      		push r15
+ 572 0012 0F93      		push r16
+ 573 0014 1F93      		push r17
+ 574 0016 CF93      		push r28
+ 575 0018 DF93      		push r29
+ 576               	/* prologue: function */
+ 577               	/* frame size = 0 */
+ 578               	/* stack size = 13 */
+ 579               	.L__stack_usage = 13
+ 196:main.c        ****   TCCR0A = 0;
+ 581               	.LM62:
+ 582 001a 10BE      		out 0x30,__zero_reg__
+ 197:main.c        ****   TCCR0B = 0;
+ 584               	.LM63:
+ 585 001c 1ABC      		out 0x2a,__zero_reg__
+ 198:main.c        **** 
+ 587               	.LM64:
+ 588 001e 13BE      		out 0x33,__zero_reg__
+ 200:main.c        ****   MCUSR = 0;                     // clear watchdog flag
+ 590               	.LM65:
+ 591 0020 84B7      		in r24,0x34
+ 201:main.c        ****   WDTCR = _BV(WDCE) | _BV(WDE);  // enable WDT disable
+ 593               	.LM66:
+ 594 0022 14BE      		out 0x34,__zero_reg__
+ 202:main.c        **** 
+ 596               	.LM67:
+ 597 0024 98E1      		ldi r25,lo8(24)
+ 598 0026 91BD      		out 0x21,r25
+ 204:main.c        **** 
+ 600               	.LM68:
+ 601 0028 11BC      		out 0x21,__zero_reg__
+ 206:main.c        ****   PORTB = _BV(LED) |              //  visible LED is off when pin is high
+ 603               	.LM69:
+ 604 002a 95E0      		ldi r25,lo8(5)
+ 605 002c 97BB      		out 0x17,r25
+ 207:main.c        ****           _BV(IRLED) |            // IR LED is off when pin is high
+ 607               	.LM70:
+ 608 002e 97E0      		ldi r25,lo8(7)
+ 609 0030 98BB      		out 0x18,r25
+ 214:main.c        ****     // Flash out an error and go to sleep
+ 611               	.LM71:
+ 612 0032 82FF      		sbrs r24,2
+ 613 0034 00C0      		rjmp .L28
+ 216:main.c        ****     tvbgone_sleep();  
+ 615               	.LM72:
+ 616 0036 82E0      		ldi r24,lo8(2)
+ 617 0038 00D0      		rcall flashslowLEDx
+ 217:main.c        ****   }
+ 619               	.LM73:
+ 620 003a 00D0      		rcall tvbgone_sleep
+ 621               	.L28:
+ 220:main.c        **** 
+ 623               	.LM74:
+ 624 003c 88E8      		ldi r24,lo8(-120)
+ 625 003e 93E1      		ldi r25,lo8(19)
+ 626 0040 00D0      		rcall delay_ten_us
+ 223:main.c        ****     region = US; // US
+ 628               	.LM75:
+ 629 0042 C6B3      		in r28,0x16
+ 630 0044 C1FB      		bst r28,1
+ 631 0046 8827      		clr r24
+ 632 0048 80F9      		bld r24,0
+ 633 004a C1E0      		ldi r28,lo8(1)
+ 634 004c C827      		eor r28,r24
+ 232:main.c        ****   
+ 636               	.LM76:
+ 637 004e 83E0      		ldi r24,lo8(3)
+ 638 0050 8C0F      		add r24,r28
+ 639 0052 00D0      		rcall quickflashLEDx
+ 235:main.c        ****   
+ 641               	.LM77:
+ 642 0054 88EA      		ldi r24,lo8(-88)
+ 643 0056 91E6      		ldi r25,lo8(97)
+ 644 0058 00D0      		rcall delay_ten_us
+ 645               	.LBB24:
+ 646               	.LBB25:
+ 648               	.Ltext3:
+ 408:/usr/lib/avr/include/avr/wdt.h **** 				"in __tmp_reg__,__SREG__" "\n\t"
+ 650               	.LM78:
+ 651 005a 99E2      		ldi r25,lo8(41)
+ 652 005c 88E1      		ldi r24,lo8(24)
+ 653               	/* #APP */
+ 654               	 ;  408 "/usr/lib/avr/include/avr/wdt.h" 1
+ 655 005e 0FB6      		in __tmp_reg__,__SREG__
+ 656 0060 F894      		cli
+ 657 0062 A895      		wdr
+ 658 0064 81BD      		out 33, r24
+ 659 0066 0FBE      		out __SREG__,__tmp_reg__
+ 660 0068 91BD      		out 33, r25
+ 661               	 	
+ 662               	 ;  0 "" 2
+ 663               	/* #NOAPP */
+ 664               	.LBE25:
+ 665               	.LBE24:
+ 667               	.Ltext4:
+ 248:main.c        ****       j = num_NAcodes;
+ 669               	.LM79:
+ 670 006a C111      		cpse r28,__zero_reg__
+ 671 006c 00C0      		rjmp .L29
+ 249:main.c        ****     } else {
+ 673               	.LM80:
+ 674 006e 9090 0000 		lds r9,num_NAcodes
+ 675 0072 00C0      		rjmp .L30
+ 676               	.L29:
+ 251:main.c        ****     }
+ 678               	.LM81:
+ 679 0074 9090 0000 		lds r9,num_EUcodes
+ 680               	.L30:
+ 681 0078 80E0      		ldi r24,lo8(EUpowerCodes)
+ 682 007a E82E      		mov r14,r24
+ 683 007c 80E0      		ldi r24,hi8(EUpowerCodes)
+ 684 007e F82E      		mov r15,r24
+ 685 0080 90E0      		ldi r25,lo8(NApowerCodes)
+ 686 0082 C92E      		mov r12,r25
+ 687 0084 90E0      		ldi r25,hi8(NApowerCodes)
+ 688 0086 D92E      		mov r13,r25
+ 255:main.c        **** 
+ 690               	.LM82:
+ 691 0088 10E0      		ldi r17,0
+ 692               	.L31:
+ 255:main.c        **** 
+ 694               	.LM83:
+ 695 008a 1915      		cp r17,r9
+ 696 008c 01F4      		brne .+2
+ 697 008e 00C0      		rjmp .L42
+ 698               	.LBB26:
+ 261:main.c        **** 
+ 700               	.LM84:
+ 701               	/* #APP */
+ 702               	 ;  261 "main.c" 1
+ 703 0090 A895      		wdr
+ 704               	 ;  0 "" 2
+ 264:main.c        **** 	code_ptr = (PGM_P)pgm_read_word(NApowerCodes+i);  
+ 706               	.LM85:
+ 707               	/* #NOAPP */
+ 708 0092 C111      		cpse r28,__zero_reg__
+ 709 0094 00C0      		rjmp .L32
+ 710               	.LBB27:
+ 265:main.c        ****       } else {
+ 712               	.LM86:
+ 713 0096 F601      		movw r30,r12
+ 714 0098 00C0      		rjmp .L41
+ 715               	.L32:
+ 716               	.LBE27:
+ 717               	.LBB28:
+ 267:main.c        ****       }
+ 719               	.LM87:
+ 720 009a F701      		movw r30,r14
+ 721               	.L41:
+ 722               	/* #APP */
+ 723               	 ;  267 "main.c" 1
+ 724 009c 8591      		lpm r24, Z+
+ 725 009e 9491      		lpm r25, Z
+ 726               		
+ 727               	 ;  0 "" 2
+ 728               	/* #NOAPP */
+ 729               	.LBE28:
+ 730 00a0 9093 0000 		sts code_ptr+1,r25
+ 731 00a4 8093 0000 		sts code_ptr,r24
+ 732               	.LBB29:
+ 274:main.c        ****       // set OCR for Timer1 to output this POWER code's carrier frequency
+ 734               	.LM88:
+ 735 00a8 E091 0000 		lds r30,code_ptr
+ 736 00ac F091 0000 		lds r31,code_ptr+1
+ 737 00b0 CF01      		movw r24,r30
+ 738 00b2 0196      		adiw r24,1
+ 739 00b4 9093 0000 		sts code_ptr+1,r25
+ 740 00b8 8093 0000 		sts code_ptr,r24
+ 741               	/* #APP */
+ 742               	 ;  274 "main.c" 1
+ 743 00bc D491      		lpm r29, Z
+ 744               		
+ 745               	 ;  0 "" 2
+ 746               	/* #NOAPP */
+ 747               	.LBE29:
+ 276:main.c        ****       
+ 749               	.LM89:
+ 750 00be D9BD      		out 0x29,r29
+ 751               	.LBB30:
+ 283:main.c        ****       DEBUGP(putstring("\n\rOn/off pairs: "); putnum_ud(numpairs));
+ 753               	.LM90:
+ 754 00c0 8091 0000 		lds r24,code_ptr
+ 755 00c4 9091 0000 		lds r25,code_ptr+1
+ 756 00c8 FC01      		movw r30,r24
+ 757               	/* #APP */
+ 758               	 ;  283 "main.c" 1
+ 759 00ca 8490      		lpm r8, Z
+ 760               		
+ 761               	 ;  0 "" 2
+ 762               	/* #NOAPP */
+ 763 00cc 3196      		adiw r30,1
+ 764               	.LBE30:
+ 765               	.LBB31:
+ 288:main.c        ****       DEBUGP(putstring("\n\rCompression: "); putnum_ud(bitcompression));
+ 767               	.LM91:
+ 768               	/* #APP */
+ 769               	 ;  288 "main.c" 1
+ 770 00ce 0491      		lpm r16, Z
+ 771               		
+ 772               	 ;  0 "" 2
+ 773               	/* #NOAPP */
+ 774 00d0 3196      		adiw r30,1
+ 775               	.LBE31:
+ 776               	.LBB32:
+ 293:main.c        ****       code_ptr+=2;
+ 778               	.LM92:
+ 779               	/* #APP */
+ 780               	 ;  293 "main.c" 1
+ 781 00d2 A590      		lpm r10, Z+
+ 782 00d4 B490      		lpm r11, Z
+ 783               		
+ 784               	 ;  0 "" 2
+ 785               	/* #NOAPP */
+ 786               	.LBE32:
+ 294:main.c        **** 
+ 788               	.LM93:
+ 789 00d6 0496      		adiw r24,4
+ 790 00d8 9093 0000 		sts code_ptr+1,r25
+ 791 00dc 8093 0000 		sts code_ptr,r24
+ 792               	.LBB33:
+ 317:main.c        **** 	uint8_t ti;
+ 794               	.LM94:
+ 795 00e0 712C      		mov r7,__zero_reg__
+ 796               	.L34:
+ 317:main.c        **** 	uint8_t ti;
+ 798               	.LM95:
+ 799 00e2 7814      		cp r7,r8
+ 800 00e4 01F0      		breq .L43
+ 801               	.LBB34:
+ 323:main.c        **** 
+ 803               	.LM96:
+ 804 00e6 802F      		mov r24,r16
+ 805 00e8 00D0      		rcall read_bits
+ 806 00ea 880F      		lsl r24
+ 807 00ec 880F      		lsl r24
+ 808               	.LBB35:
+ 326:main.c        **** 	offtime = pgm_read_word(time_ptr+ti+2);  // read word 2 - offtime
+ 810               	.LM97:
+ 811 00ee 282F      		mov r18,r24
+ 812 00f0 30E0      		ldi r19,0
+ 813 00f2 F501      		movw r30,r10
+ 814 00f4 E20F      		add r30,r18
+ 815 00f6 F31F      		adc r31,r19
+ 816               	/* #APP */
+ 817               	 ;  326 "main.c" 1
+ 818 00f8 8591      		lpm r24, Z+
+ 819 00fa 9491      		lpm r25, Z
+ 820               		
+ 821               	 ;  0 "" 2
+ 822               	/* #NOAPP */
+ 823               	.LBE35:
+ 824               	.LBB36:
+ 327:main.c        **** 
+ 826               	.LM98:
+ 827 00fc F901      		movw r30,r18
+ 828 00fe 3296      		adiw r30,2
+ 829 0100 EA0D      		add r30,r10
+ 830 0102 FB1D      		adc r31,r11
+ 831               	/* #APP */
+ 832               	 ;  327 "main.c" 1
+ 833 0104 6591      		lpm r22, Z+
+ 834 0106 7491      		lpm r23, Z
+ 835               		
+ 836               	 ;  0 "" 2
+ 837               	/* #NOAPP */
+ 838               	.LBE36:
+ 330:main.c        ****       } 
+ 840               	.LM99:
+ 841 0108 41E0      		ldi r20,lo8(1)
+ 842 010a D111      		cpse r29,__zero_reg__
+ 843 010c 00C0      		rjmp .L35
+ 844 010e 40E0      		ldi r20,0
+ 845               	.L35:
+ 846 0110 00D0      		rcall xmitCodeElement
+ 847               	.LBE34:
+ 317:main.c        **** 	uint8_t ti;
+ 849               	.LM100:
+ 850 0112 7394      		inc r7
+ 851 0114 00C0      		rjmp .L34
+ 852               	.L43:
+ 853               	.LBE33:
+ 335:main.c        **** 
+ 855               	.LM101:
+ 856 0116 1092 0000 		sts bitsleft_r,__zero_reg__
+ 338:main.c        ****       
+ 858               	.LM102:
+ 859 011a 88EA      		ldi r24,lo8(-88)
+ 860 011c 91E6      		ldi r25,lo8(97)
+ 861 011e 00D0      		rcall delay_ten_us
+ 341:main.c        ****     }
+ 863               	.LM103:
+ 864 0120 00D0      		rcall quickflashLED
+ 865               	.LBE26:
+ 255:main.c        **** 
+ 867               	.LM104:
+ 868 0122 1F5F      		subi r17,lo8(-(1))
+ 869 0124 F2E0      		ldi r31,2
+ 870 0126 EF0E      		add r14,r31
+ 871 0128 F11C      		adc r15,__zero_reg__
+ 872 012a 82E0      		ldi r24,2
+ 873 012c C80E      		add r12,r24
+ 874 012e D11C      		adc r13,__zero_reg__
+ 875 0130 00C0      		rjmp .L31
+ 876               	.L42:
+ 877               	.LBB37:
+ 878               	.LBB38:
+ 880               	.Ltext5:
+ 882               	.LM105:
+ 883               	/* #APP */
+ 884               	 ;  449 "/usr/lib/avr/include/avr/wdt.h" 1
+ 885 0132 0FB6      		in __tmp_reg__,__SREG__
+ 886 0134 F894      		cli
+ 887 0136 A895      		wdr
+ 888 0138 81B5      		in  r24,33
+ 889 013a 8861      		ori r24,24
+ 890 013c 81BD      		out 33,r24
+ 891 013e 11BC      		out 33,__zero_reg__
+ 892 0140 0FBE      		out __SREG__,__tmp_reg__
+ 893               		
+ 894               	 ;  0 "" 2
+ 895               	/* #NOAPP */
+ 896               	.LBE38:
+ 897               	.LBE37:
+ 899               	.Ltext6:
+ 349:main.c        ****   delay_ten_us(65500); // wait maxtime 
+ 901               	.LM106:
+ 902 0142 8CED      		ldi r24,lo8(-36)
+ 903 0144 9FEF      		ldi r25,lo8(-1)
+ 904 0146 00D0      		rcall delay_ten_us
+ 350:main.c        ****   quickflashLEDx(4);
+ 906               	.LM107:
+ 907 0148 8CED      		ldi r24,lo8(-36)
+ 908 014a 9FEF      		ldi r25,lo8(-1)
+ 909 014c 00D0      		rcall delay_ten_us
+ 351:main.c        **** 
+ 911               	.LM108:
+ 912 014e 84E0      		ldi r24,lo8(4)
+ 913 0150 00D0      		rcall quickflashLEDx
+ 353:main.c        **** }
+ 915               	.LM109:
+ 916 0152 00D0      		rcall tvbgone_sleep
+ 354:main.c        **** 
+ 918               	.LM110:
+ 919 0154 80E0      		ldi r24,0
+ 920 0156 90E0      		ldi r25,0
+ 921               	/* epilogue start */
+ 922 0158 DF91      		pop r29
+ 923 015a CF91      		pop r28
+ 924 015c 1F91      		pop r17
+ 925 015e 0F91      		pop r16
+ 926 0160 FF90      		pop r15
+ 927 0162 EF90      		pop r14
+ 928 0164 DF90      		pop r13
+ 929 0166 CF90      		pop r12
+ 930 0168 BF90      		pop r11
+ 931 016a AF90      		pop r10
+ 932 016c 9F90      		pop r9
+ 933 016e 8F90      		pop r8
+ 934 0170 7F90      		pop r7
+ 935 0172 0895      		ret
+ 961               	.Lscope8:
+ 963               		.stabd	78,0,0
+ 964               		.comm	code_ptr,2,1
+ 965               	.global	bits_r
+ 966               		.section .bss
+ 969               	bits_r:
+ 970 0000 00        		.zero	1
+ 971               	.global	bitsleft_r
+ 974               	bitsleft_r:
+ 975 0001 00        		.zero	1
+ 979               		.text
+ 981               	.Letext0:
+ 982               		.ident	"GCC: (GNU) 4.9.2"
+ 983               	.global __do_clear_bss
+DEFINED SYMBOLS
+                            *ABS*:0000000000000000 main.c
+     /tmp/ccwTPOQU.s:2      *ABS*:000000000000003e __SP_H__
+     /tmp/ccwTPOQU.s:3      *ABS*:000000000000003d __SP_L__
+     /tmp/ccwTPOQU.s:4      *ABS*:000000000000003f __SREG__
+     /tmp/ccwTPOQU.s:5      *ABS*:0000000000000000 __tmp_reg__
+     /tmp/ccwTPOQU.s:6      *ABS*:0000000000000001 __zero_reg__
+     /tmp/ccwTPOQU.s:116    .text:0000000000000000 read_bits
+                            *COM*:0000000000000002 code_ptr
+     /tmp/ccwTPOQU.s:969    .bss:0000000000000000 bits_r
+     /tmp/ccwTPOQU.s:974    .bss:0000000000000001 bitsleft_r
+     /tmp/ccwTPOQU.s:212    .text:000000000000006c delay_ten_us
+     /tmp/ccwTPOQU.s:270    .text:0000000000000082 xmitCodeElement
+     /tmp/ccwTPOQU.s:336    .text:00000000000000ac tvbgone_sleep
+     /tmp/ccwTPOQU.s:404    .text:00000000000000d4 quickflashLED
+     /tmp/ccwTPOQU.s:433    .text:00000000000000e0 quickflashLEDx
+     /tmp/ccwTPOQU.s:486    .text:00000000000000fa flashslowLEDx
+     /tmp/ccwTPOQU.s:558    .text.startup:0000000000000000 main
+
+UNDEFINED SYMBOLS
+num_NAcodes
+num_EUcodes
+EUpowerCodes
+NApowerCodes
+__do_clear_bss
